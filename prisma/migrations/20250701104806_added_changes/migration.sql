@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Plan` ADD COLUMN `gbp` VARCHAR(191) NULL;

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>{{#if subject}}{{subject}}{{else}}Notification{{/if}}</title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style type="text/css">
+    * {
+      font-family: "Poppins", sans-serif;
+    }
+  </style>
+</head>
+
+<body>
+  <div style="height: 100vh; overflow-y: auto; display: flex;">
+    <table
+      style="max-width: 600px; width:100%; border-radius: 10px; background-color: #fff; border-collapse: collapse; margin: auto; height: auto; max-height: 700px; overflow-y: auto;">
+
+      <!-- Header with Logo -->
+      <tr style="background-color: #f5f5f5;">
+        <td style="padding: 15px; text-align:center;">
+          {{#if logo}}
+          <img src="{{logo}}" alt="{{companyName}}" style="width:120px; display:block; margin:0 auto;">
+          {{else}}
+          <h2 style="margin:0; color:#32CD30;">{{#if companyName}}{{companyName}}{{else}}SecurPoint{{/if}}</h2>
+          {{/if}}
+        </td>
+      </tr>
+
+      <!-- Body -->
+      <tr style="background-color:#fff; box-shadow: 4px 16px 25px rgb(0 0 0 / 12%);">
+        <td style="padding-top: 50px; padding-inline:30px; text-align:center;">
+
+          <!-- Title -->
+          {{#if title}}
+          <h2 style="margin:0 0 20px 0; color:#001649;">{{title}}</h2>
+          {{/if}}
+
+          <!-- Message -->
+          <p style="margin:0 0 30px 0; line-height:1.5;">
+            {{#if message}}{{{message}}}{{else}}You have a new notification.{{/if}}
+          </p>
+
+          {{#if plan_name}}
+          <table width="100%" cellpadding="6" cellspacing="0" role="presentation" style="border-collapse:collapse;">
+            <tbody>
+              <tr>
+                <td style="font-size:15px;color:#444;width:40%;"><strong>Name</strong></td>
+                <td style="font-size:15px;color:#444;">{{plan_name}}</td>
+              </tr>
+              <tr>
+                <td style="font-size:15px;color:#444;"><strong>Duration</strong></td>
+                <td style="font-size:15px;color:#444;">{{duration}}</td>
+              </tr>
+              <tr>
+                <td style="font-size:15px;color:#444;"><strong>Price</strong></td>
+                <td style="font-size:15px;color:#444;">{{price}}</td>
+              </tr>
+            </tbody>
+          </table>
+          {{/if}}
+
+          <!-- CTA Button -->
+          {{#if href_url}}
+          <div style="margin-top: 40px;">
+            <a href="{{href_url}}"
+              style="background-color:#32CD30; padding: 10px 15px; border-radius:5px; outline:none; border:1px solid #001649; color:#fff; text-decoration:none;">
+              {{#if buttonText}}{{buttonText}}{{else}}Click here{{/if}}
+            </a>
+          </div>
+          {{/if}}
+
+          <!-- Signature -->
+          <div style="padding-top: 50px; text-align:left;">
+            <h4 style="margin-bottom: 10px">Cheers,</h4>
+            <p style="margin-top:0;">
+              {{#if companyName}}{{companyName}}{{else}}SecurPoint{{/if}} Team
+            </p>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr style="background-color: #32CD30;">
+        <td style="padding:30px; text-align:center;">
+          <p style="margin:0 0 10px 0; color:#fff;">Need More Help?</p>
+          <a href="mailto:{{#if supportEmail}}{{supportEmail}}{{else}}SecurPointswe@gmail.com{{/if}}"
+            style="color:#fff; text-decoration: underline;">
+            We are here to help you out
+          </a>
+        </td>
+      </tr>
+
+    </table>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,190 @@
+import express from "express";
+import { Server } from "socket.io";
+import { createServer } from 'https'
+// import { createServer } from 'http'
+import fs from 'fs'
+// import { initializeSocketIO } from "./utils/socket.js";
+import cors from 'cors'
+import { userRouter } from "./routes/userRouter.js";
+import { PrismaClient } from "@prisma/client";
+import cron from 'node-cron'
+import { notifyAndExpirePromotions, notifyExpiringPlans } from "./utils/helper.js";
+import { chatRouter } from "./routes/chat.js";
+import { messageRouter } from "./routes/message.js";
+import { initializeSocketIO } from "./utils/socket.js";
+import { adminRouter } from "./routes/adminRouter.js";
+import { paymentRouter } from "./routes/paymentRouter.js";
+import Stripe from "stripe";
+import { notificationRouter } from "./routes/notification.js";
+import { adminChatRouter } from "./routes/adminChatRouter.js";
+import { adminNotificationRouter } from "./routes/adminnotification.js";
+const stripe = new Stripe("sk_test_51PYvCV2LI5ClHCtZ6BgDCz9GPp58fADS4b9YUWtZyyMzIrf1CKW81GBL185Z4mZ6qQZsiBYrEPjSMgAGL3wGxwKh00fmw7ebsu");
+const app = express();
+
+// const sslOptions = {
+//   ca: fs.readFileSync("/var/www/html/ssl/ca_bundle.crt"),
+//   key: fs.readFileSync("/var/www/html/ssl/private.key"),
+//   cert: fs.readFileSync("/var/www/html/ssl/certificate.crt"),
+// };
+
+const sslOptions = {
+  key: fs.readFileSync("/etc/letsencrypt/live/securpoint.app/privkey.pem"),
+  cert: fs.readFileSync("/etc/letsencrypt/live/securpoint.app/fullchain.pem"),
+};
+
+const httpServer = createServer(sslOptions, app);
+// const httpServer = createServer(app);
+
+
+
+const prisma = new PrismaClient();
+const io = new Server(httpServer, {
+  pingTimeout: 60000,
+  cors: {
+    origin: 'http://localhost:3000',
+    credentials: true,
+  },
+});
+app.set("io", io);
+app.use(
+  cors({
+    origin: true, // For multiple cors origin for production. Refer https://github.com/hiteshchoudhary/apihub/blob/a846abd7a0795054f48c7eb3e71f3af36478fa96/.env.sample#L12C1-L12C12
+    credentials: true,
+  })
+);
+
+app.use(express.static('public'));
+const webhookSecret = 'whsec_Rh5ADJjpSnlxxT5vMJaXTUHjw209ktPR';
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.log(`Webhook signature verification failed.`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the checkout.session.completed event
+  if (event.type === 'checkout.session.completed') {
+
+    console.log("code reaches here>>>>>>>>>>>>>>>>>>>")
+    const session = event.data.object;
+
+    const { userId, planId } = session.metadata;
+
+    const plan = await prisma.plan.findUnique({
+      where: { id: parseInt(planId) }
+    });
+
+    if (!plan) {
+      console.error("Plan not found for ID:", planId);
+      return res.status(404).json({ message: "Plan not found" });
+    }
+
+    const startDate = new Date();
+    const expiredAt = new Date(startDate);
+
+
+    const existingSubscription = await prisma.userSubscription.findFirst({
+      where: {
+        userId: parseInt(userId),
+        sub_status: 1
+      }
+    });
+
+    if (existingSubscription) {
+      const currentPlan = await prisma.plan.findUnique({ where: { id: existingSubscription.planId } });
+      const remainingDays = (new Date(existingSubscription.expired_at) - startDate) / (1000 * 60 * 60 * 24);
+      const remainingValue = (remainingDays / currentPlan.plan_days) * parseFloat(currentPlan.amount);
+      const newPlanPrice = parseFloat(plan.amount);
+
+      if (newPlanPrice > parseFloat(currentPlan.amount)) {
+        // Upgrade logic
+        const creditDays = (remainingValue / newPlanPrice) * plan.plan_days;
+        const totalDays = remainingDays + (plan.plan_days * 30);
+        expiredAt.setMonth(startDate.getMonth() + plan.plan_days);
+        console.log(">>>>>>", plan.plan_days)
+        console.log(">>>>>>", expiredAt)
+        expiredAt.setDate(expiredAt.getDate() + remainingDays);
+        console.log(">>>>>>", expiredAt)
+
+        await prisma.userSubscription.update({
+          where: { id: existingSubscription.id },
+          data: { sub_status: 0 }
+        });
+
+        await prisma.userSubscription.create({
+          data: {
+            planId: parseInt(planId),
+            userId: parseInt(userId),
+            start_date: startDate,
+            expired_at: expiredAt,
+            sub_status: 1,  // Active status
+            overlap_status: 0,  // Default value
+            refund_status: 0,  // Default value
+            overlap_date: expiredAt // Assuming overlap date is the same as expiry date
+          }
+        });
+
+      }
+      return res.status(200).json({ received: true });
+    }
+    console.log("++++++++")
+    expiredAt.setMonth(startDate.getMonth() + plan.plan_days);
+    await prisma.userSubscription.create({
+      data: {
+        planId: parseInt(planId),
+        userId: parseInt(userId),
+        start_date: startDate,
+        expired_at: expiredAt,
+        sub_status: 1,  // Active status
+        overlap_status: 0,  // Default value
+        refund_status: 0,  // Default value
+        overlap_date: expiredAt,
+      }
+    });
+
+    await prisma.user.update({
+      where: { id: parseInt(userId) },
+      data: { promotedAssetCount: 0 }
+    });
+  }
+
+  return res.status(200).json({ received: true });
+});
+
+
+app.use('/user/payment/stripewebhook', express.raw({ type: 'application/json' }));
+
+app.use(express.json());
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
+app.use('/user', userRouter);
+app.use('/user/payment', paymentRouter)
+app.use('/chat', chatRouter);
+app.use('/message', messageRouter);
+app.use('/admin', adminRouter);
+app.use('/notifications', notificationRouter)
+app.use('/support', adminChatRouter)
+app.use('/adminNotifications', adminNotificationRouter)
+app.get("/test", (req, res) => {
+  console.log("Domain is working properly ✅");
+  res.send("Domain is working properly ✅");
+});
+
+
+// cron.schedule('*/1 * * * *', notifyAndExpirePromotions);
+// cron.schedule('*/1 * * * *', notifyExpiringPlans);
+
+initializeSocketIO(io);
+httpServer.listen(4000, () => {
+  console.log("Node app is running on port 4000");
+})
+
+
