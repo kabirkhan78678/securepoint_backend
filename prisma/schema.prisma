@@ -106,6 +106,7 @@ model Category {
   id            Int           @id @default(autoincrement())
   categoryName  String
   categoryImage String?
+  display_order Int           @default(1)
   Asset         Asset[]
   SubCategory   SubCategory[]
 }

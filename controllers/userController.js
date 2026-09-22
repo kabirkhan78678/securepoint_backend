@@ -1331,9 +1331,10 @@ export async function getCategories(req, res) {
         const reportedAssetIds = await getReportedAssetIds(req.user.id);
         const [categories, categoryCounts] = await Promise.all([
             prisma.category.findMany({
-                orderBy: {
-                    id: 'desc'
-                }
+                orderBy: [
+                    { display_order: 'asc' },
+                    { id: 'asc' }
+                ]
             }),
             prisma.asset.groupBy({
                 by: ['categoryId'],
@@ -1817,7 +1818,10 @@ export async function getMyAssets(req, res) {
         );
 
         const categories = await prisma.category.findMany({
-            orderBy: { id: "desc" }
+            orderBy: [
+                { display_order: "asc" },
+                { id: "asc" }
+            ]
         });
 
         const categoryCounts = await prisma.asset.groupBy({
@@ -2082,7 +2086,10 @@ export async function getAllAssets(req, res) {
         );
 
         const categories = await prisma.category.findMany({
-            orderBy: { id: "desc" }
+            orderBy: [
+                { display_order: "asc" },
+                { id: "asc" }
+            ]
         });
 
         const categoryCounts = await prisma.asset.groupBy({
@@ -2109,6 +2116,19 @@ export async function getAllAssets(req, res) {
                 : null,
             count: categoryCountMap.get(category.id) || 0
         }));
+
+        const categoryOrderMap = new Map(
+            categories.map((c) => [c.id, c.display_order ?? 999999])
+        );
+
+        assets.sort((a, b) => {
+            const orderA = categoryOrderMap.get(a.categoryId) ?? 999999;
+            const orderB = categoryOrderMap.get(b.categoryId) ?? 999999;
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            return (b.promote || 0) - (a.promote || 0) || b.id - a.id;
+        });
 
         return res.status(200).json({
             status: 200,
@@ -2473,9 +2493,10 @@ export async function homePage(req, res) {
     try {
         const { search } = req.query
         const categories = await prisma.category.findMany({
-            orderBy: {
-                id: 'desc'
-            }
+            orderBy: [
+                { display_order: 'asc' },
+                { id: 'asc' }
+            ]
         });
         const reportedAssetIds = await getReportedAssetIds(req.user.id);
 
@@ -2590,9 +2611,10 @@ export async function publicHomePage(req, res) {
         const blockedUserIds = blockedUsers.map((user) => user.id);
 
         const categories = await prisma.category.findMany({
-            orderBy: {
-                id: 'desc'
-            }
+            orderBy: [
+                { display_order: 'asc' },
+                { id: 'asc' }
+            ]
         });
 
         const validCategoryIds = categories.map((category) => category.id);
@@ -4306,10 +4328,10 @@ export async function privacyPolicy(req, res) {
 export async function getAllCategory(req, res) {
     try {
         const categoryList = await prisma.category.findMany({
-
-            orderBy: {
-                id: 'desc'
-            }
+            orderBy: [
+                { display_order: 'asc' },
+                { id: 'asc' }
+            ]
         });
         console.log(categoryList);
         const formattedCategories = categoryList.map((category) => ({

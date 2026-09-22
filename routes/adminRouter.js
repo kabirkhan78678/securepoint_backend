@@ -1,5 +1,5 @@
 import express from "express";
-import {login, passwordChange, getAllUsers, addCategory, addSubCategory, getAllCategory, getAllSubCategory, updateCategory, updateSubCategory, dashBoard, getAllAssets, deleteCategory, deleteSubCategory, reportedAssets, reportedProfiles, deleteAsset, deleteAccount, getUserSubscription, getPromotedAssets, getUserById, getSingleAsset, getSingleCategory, getSingleSubCategory,getMyProfile, editProfile,getSingleSubscription,getAssetStatus,addAssetStatus,getAssetStatusById,editAssetStatusById,deleteAssetStatusById,forgotPassword,verifyPassword,changePassword,getFAQById, addFAQ, getFAQs, editFAQById, deleteFAQById,getPlans,
+import {login, passwordChange, getAllUsers, addCategory, addSubCategory, getAllCategory, getAllSubCategory, updateCategory, updateSubCategory, reorderCategories, dashBoard, getAllAssets, deleteCategory, deleteSubCategory, reportedAssets, reportedProfiles, deleteAsset, deleteAccount, getUserSubscription, getPromotedAssets, getUserById, getSingleAsset, getSingleCategory, getSingleSubCategory,getMyProfile, editProfile,getSingleSubscription,getAssetStatus,addAssetStatus,getAssetStatusById,editAssetStatusById,deleteAssetStatusById,forgotPassword,verifyPassword,changePassword,getFAQById, addFAQ, getFAQs, editFAQById, deleteFAQById,getPlans,
     toggleUserStatusByAdmin, toggleAssetsStatusByAdmin,
     reviewRequest,
     getReviewRequests,
@@ -22,7 +22,7 @@ import {login, passwordChange, getAllUsers, addCategory, addSubCategory, getAllC
 import { adminAuth } from "../middlewares/adminAuth.js";
 import { upload } from "../middlewares/upload.js";
 
-export const adminRouter = express.Router()
+export const adminRouter = express.Router();
 
 adminRouter.post("/createAdmin", adminAuth(["ADMIN"]), createAdmin);
 
@@ -50,31 +50,35 @@ adminRouter.get("/allAssets", adminAuth(["SUBADMIN", "ADMIN"]), getAllAssets);
 
 adminRouter.get("/allAssets/:id", adminAuth(["SUBADMIN", "ADMIN"]), getSingleAsset);
 
-adminRouter.post("/addCategory",upload.single('image'),adminAuth(["SUBADMIN", "ADMIN"]), addCategory);
+adminRouter.post("/addCategory", upload.single('image'), adminAuth(["SUBADMIN", "ADMIN"]), addCategory);
 
-adminRouter.delete('/category/:categoryId',adminAuth(["SUBADMIN", "ADMIN"]), deleteCategory);
+adminRouter.delete('/category/:categoryId', adminAuth(["SUBADMIN", "ADMIN"]), deleteCategory);
 
-adminRouter.delete('/subCategory/:subcategoryId',adminAuth(["SUBADMIN", "ADMIN"]), deleteSubCategory)
+adminRouter.delete('/subCategory/:subcategoryId', adminAuth(["SUBADMIN", "ADMIN"]), deleteSubCategory);
 
-adminRouter.post('/addSubCategory',adminAuth(["SUBADMIN", "ADMIN"]), addSubCategory);
+adminRouter.post('/addSubCategory', adminAuth(["SUBADMIN", "ADMIN"]), addSubCategory);
 
-adminRouter.get("/getAllCategory",adminAuth(["SUBADMIN", "ADMIN"]), getAllCategory);
+adminRouter.get("/getAllCategory", adminAuth(["SUBADMIN", "ADMIN"]), getAllCategory);
 
-adminRouter.get("/getAllSubCategory",adminAuth(["SUBADMIN", "ADMIN"]), getAllSubCategory);
+adminRouter.put("/categories/reorder", adminAuth(["SUBADMIN", "ADMIN"]), reorderCategories);
 
-adminRouter.get("/getAllCategory/:id",adminAuth(["SUBADMIN", "ADMIN"]), getSingleCategory);
+adminRouter.post("/reorderCategories", adminAuth(["SUBADMIN", "ADMIN"]), reorderCategories);
 
-adminRouter.get("/getAllSubCategory/:id",adminAuth(["SUBADMIN", "ADMIN"]), getSingleSubCategory);
+adminRouter.get("/getAllSubCategory", adminAuth(["SUBADMIN", "ADMIN"]), getAllSubCategory);
+
+adminRouter.get("/getAllCategory/:id", adminAuth(["SUBADMIN", "ADMIN"]), getSingleCategory);
+
+adminRouter.get("/getAllSubCategory/:id", adminAuth(["SUBADMIN", "ADMIN"]), getSingleSubCategory);
 
 adminRouter.post("/updateCategory", upload.single("image"), adminAuth(["SUBADMIN", "ADMIN"]), updateCategory); 
 
-adminRouter.post("/updateSubCategory",  adminAuth(["SUBADMIN", "ADMIN"]), updateSubCategory);
+adminRouter.post("/updateSubCategory", adminAuth(["SUBADMIN", "ADMIN"]), updateSubCategory);
 
-adminRouter.get("/reportedAssets",adminAuth(["SUBADMIN", "ADMIN"]), reportedAssets);
+adminRouter.get("/reportedAssets", adminAuth(["SUBADMIN", "ADMIN"]), reportedAssets);
 
-adminRouter.get("/reportedProfiles",adminAuth(["SUBADMIN", "ADMIN"]), reportedProfiles);
+adminRouter.get("/reportedProfiles", adminAuth(["SUBADMIN", "ADMIN"]), reportedProfiles);
 
-adminRouter.delete('/asset/:id',adminAuth(["SUBADMIN", "ADMIN"]), deleteAsset);
+adminRouter.delete('/asset/:id', adminAuth(["SUBADMIN", "ADMIN"]), deleteAsset);
 
 adminRouter.delete('/deleteUserAccount/:id',adminAuth(["SUBADMIN", "ADMIN"]), deleteAccount);
 

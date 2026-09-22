@@ -177,6 +177,11 @@ export async function paymentThroughStripe(req, res) {
         console.log("plan", plan);
         console.log("amount", amount);
 
+        const successBase = process.env.STRIPE_SUCCESS_URL || `${process.env.BASE_URL || 'https://securpoint.app:4000'}/user/payment/success`;
+        const cancelBase = process.env.STRIPE_CANCEL_URL || `${process.env.BASE_URL || 'https://securpoint.app:4000'}/user/payment/failed`;
+        const sepSuccess = successBase.includes('?') ? '&' : '?';
+        const sepCancel = cancelBase.includes('?') ? '&' : '?';
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -190,8 +195,8 @@ export async function paymentThroughStripe(req, res) {
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `https://securpoint.app:4000/user/payment/success?planId=${planId}&userId=${req.user.id}&currency=${currencyCode}&price=${amount}`,
-            cancel_url: `https://securpoint.app:4000/user/payment/failed?planId=${planId}&userId=${req.user.id}&currency=${currencyCode}&price=${amount}`,
+            success_url: `${successBase}${sepSuccess}planId=${planId}&userId=${req.user.id}&currency=${currencyCode}&price=${amount}`,
+            cancel_url: `${cancelBase}${sepCancel}planId=${planId}&userId=${req.user.id}&currency=${currencyCode}&price=${amount}`,
             metadata: {
                 userId: req.user.id,
                 planId: planId,
@@ -425,13 +430,34 @@ export async function revenueCatWebhook(req, res) {
 
 export async function stripeSuccessAndPurchasePlan(req, res) {
     try {
-        const { userId, planId, currency, price, payment_method } = req.query;
+        const params = { ...(req.query || {}), ...(req.body || {}) };
+        const planId = params.planId;
+        let userId = params.userId || req.user?.id;
+        const currency = params.currency;
+        const price = params.price;
+        const payment_method = params.payment_method || params.paymentMethod || "Stripe";
 
-        if (!planId) {
-            return res.status(400).json({ message: "Plan ID is required" });
+        if (!userId && req.headers?.authorization) {
+            try {
+                const parts = req.headers.authorization.split(' ');
+                const token = parts.length === 2 ? parts[1] : parts[0];
+                if (token) {
+                    const decoded = jwt.verify(token, process.env.SECRET_KEY);
+                    if (decoded?.userId) {
+                        userId = decoded.userId;
+                    }
+                }
+            } catch (e) {
+                // ignore token verify error
+            }
         }
 
-        console.log("called", userId, planId, currency, price)
+        if (!planId) {
+            return res.status(400).json({ success: false, status: 400, message: "Plan ID is required" });
+        }
+
+        console.log("Stripe success called for:", { userId, planId, currency, price, payment_method });
+
         // Currency Symbol Mapping
         let currencySymbol = '$';
         const cur = currency?.toLowerCase();
@@ -446,102 +472,135 @@ export async function stripeSuccessAndPurchasePlan(req, res) {
         });
 
         if (!plan) {
-            return res.status(404).json({ message: "Plan not found" });
+            return res.status(404).json({ success: false, status: 404, message: "Plan not found" });
         }
 
-        // Check Existing Subscription
-        const existingSubscription = await prisma.userSubscription.findFirst({
-            where: { userId: parseInt(userId), sub_status: 1 }
-        });
+        const parsedUserId = userId ? parseInt(userId) : null;
+        let activeSub = null;
 
-        // Calculate dates
-        const startDate = new Date();
-        const expiredAt = new Date(startDate);
-        expiredAt.setMonth(startDate.getMonth() + plan.plan_days);
+        if (parsedUserId) {
+            // Check Existing Subscription
+            const existingSubscription = await prisma.userSubscription.findFirst({
+                where: { userId: parsedUserId, sub_status: 1 }
+            });
 
-        // Create Subscription
-        const newSubscription = await prisma.userSubscription.create({
-            data: {
-                planId: parseInt(planId),
-                userId: parseInt(userId),
-                start_date: startDate,
-                expired_at: expiredAt,
-                sub_status: 1,
-                overlap_status: 0,
-                refund_status: 0,
-                overlap_date: expiredAt,
-                payment_method
+            if (existingSubscription && existingSubscription.planId === parseInt(planId)) {
+                console.log("Subscription already active for user and plan:", parsedUserId, planId);
+                activeSub = existingSubscription;
+            } else {
+                if (existingSubscription) {
+                    await prisma.userSubscription.update({
+                        where: { id: existingSubscription.id },
+                        data: { sub_status: 0 }
+                    });
+                }
+
+                // Calculate dates
+                const startDate = new Date();
+                const expiredAt = new Date(startDate);
+                expiredAt.setMonth(startDate.getMonth() + (plan.plan_days || 1));
+
+                // Create Subscription
+                activeSub = await prisma.userSubscription.create({
+                    data: {
+                        planId: parseInt(planId),
+                        userId: parsedUserId,
+                        start_date: startDate,
+                        expired_at: expiredAt,
+                        sub_status: 1,
+                        overlap_status: 0,
+                        refund_status: 0,
+                        overlap_date: expiredAt,
+                        payment_method: payment_method || "Stripe"
+                    }
+                });
+
+                // Reset promoted asset count
+                await prisma.user.update({
+                    where: { id: parsedUserId },
+                    data: { promotedAssetCount: 0 }
+                });
+
+                // Send Confirmation Email & notifications
+                const user = await prisma.user.findUnique({ where: { id: parsedUserId } });
+                if (user) {
+                    try {
+                        await sendNotificationEmail({
+                            to: user.email,
+                            subject: "Plan Activated",
+                            template: "mail_template",
+                            context: {
+                                title: "Asset Added",
+                                message: `Welcome to ${plan.plan_name} Plan. Your subscription is now active.`,
+                                plan_name: plan.plan_name,
+                                duration: `${plan.plan_days} Months`,
+                                price: `${currencySymbol} ${price || (cur && plan[cur]) || plan.amount}`
+                            }
+                        });
+
+                        await sendNotification({
+                            toUserIds: parsedUserId,
+                            title: 'Plan Purchased',
+                            content: `You have successfully upgraded to ${plan.plan_name} Plan.`,
+                            sendFCM: true
+                        });
+
+                        const admins = await prisma.admin.findMany();
+                        await Promise.all(
+                            admins.map((admin) =>
+                                createNormalNotificationForAdmin({
+                                    toAdminId: admin.id,
+                                    byUserId: user.id,
+                                    title: 'Plan Purchased',
+                                    content: `User ${user.full_name || user.email} has upgraded to ${plan.plan_name} Plan.`
+                                })
+                            )
+                        );
+                    } catch (notifyErr) {
+                        console.error("⚠️ Notification / Email failed in success flow:", notifyErr);
+                    }
+                }
             }
-        });
+        }
 
-        // Reset promoted asset count
-        await prisma.user.update({
-            where: { id: parseInt(userId) },
-            data: { promotedAssetCount: 0 }
-        });
+        if (req.method === 'POST' || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+            return res.status(200).json({
+                success: true,
+                status: 200,
+                message: "Plan activated successfully",
+                data: activeSub
+            });
+        }
 
-        // Send Confirmation Email
-        const user = await prisma.user.findUnique({ where: { id: parseInt(userId) } });
-
-        console.log("user", user);
-
-        const mail = await sendNotificationEmail({
-            to: user.email,
-            subject: "Plan Activated",
-            template: "mail_template",
-            context: {
-                title: "Asset Added",
-                message: `Welcome to ${plan.plan_name} Plan. Your subscription is now active.`,
-                plan_name: plan.plan_name,
-                duration: `${plan.plan_days} Months`,
-                price: `${price}`
-            }
-        });
-
-        console.log("mail", mail);
-
-        // Send User Notification
-        await sendNotification({
-            toUserIds: parseInt(userId),
-            title: 'Plan Purchased',
-            content: `You have successfully upgraded to ${plan.plan_name} Plan.`,
-            sendFCM: true
-        });
-
-        // Notify Admins
-        const admins = await prisma.admin.findMany();
-        await Promise.all(
-            admins.map((admin) =>
-                createNormalNotificationForAdmin({
-                    toAdminId: admin.id,
-                    byUserId: user.id,
-                    title: 'Plan Purchased',
-                    content: `User ${user.full_name} has upgraded to ${plan.plan_name} Plan.`
-                })
-            )
-        );
+        const dashboardUrl = process.env.DASHBOARD_URL || process.env.FRONTEND_URL || process.env.BASE_URL || "https://securpoint.app:4000";
+        const logoUrl = process.env.LOGO_URL || `${process.env.BASE_URL || "https://securpoint.app:4000"}/mainLogo.png`;
 
         // Render Confirmation Page
-        // return res.render(
-        //     path.join(__dirname, '../view/', 'confirmation.ejs'),
-        //     {
-        //         user: userId,
-        //         plan: plan,
-        //         startDate: startDate,
-        //         expiredAt: expiredAt
-        //     }
-        // );
-
-        return res.status(200).json({
-            success: true
-        });
+        return res.render(
+            path.join(__dirname, '../view/confirmation.ejs'),
+            {
+                user: userId,
+                plan: plan,
+                currencySymbol,
+                price: price || (cur && plan[cur]) || plan.amount,
+                startDate: activeSub ? activeSub.start_date : new Date(),
+                expiredAt: activeSub ? activeSub.expired_at : new Date(),
+                dashboardUrl,
+                logoUrl
+            }
+        );
 
     } catch (error) {
         console.error("❌ Error in stripeSuccessAndPurchasePlan:", error);
-        return res.status(500).json({
-            message: "Internal server error",
-            error: error.message
-        });
+        if (req.method === 'POST' || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+            return res.status(500).json({
+                success: false,
+                status: 500,
+                message: "Internal server error",
+                error: error.message
+            });
+        }
+        return res.status(500).send("Internal server error while processing payment success");
     }
 }
 
@@ -633,64 +692,115 @@ export async function successPage(req, res) {
 };
 
 export async function stripeFailedPurchasePlan(req, res) {
-    const { userId, planId } = req.query;
+    try {
+        const params = { ...(req.query || {}), ...(req.body || {}) };
+        const planId = params.planId;
+        let userId = params.userId || req.user?.id;
+        const currency = params.currency;
+        const price = params.price;
 
-    if (!planId) {
-        return res.status(400).json({ message: "Plan ID is required" });
+        if (!userId && req.headers?.authorization) {
+            try {
+                const parts = req.headers.authorization.split(' ');
+                const token = parts.length === 2 ? parts[1] : parts[0];
+                if (token) {
+                    const decoded = jwt.verify(token, process.env.SECRET_KEY);
+                    if (decoded?.userId) {
+                        userId = decoded.userId;
+                    }
+                }
+            } catch (e) {
+                // ignore token verify error
+            }
+        }
+
+        console.log("Stripe failed called for:", { userId, planId, currency, price });
+
+        let plan = null;
+        if (planId) {
+            plan = await prisma.plan.findUnique({
+                where: { id: parseInt(planId) }
+            });
+        }
+
+        let currencySymbol = '$';
+        const cur = currency?.toLowerCase();
+        if (cur === 'inr') currencySymbol = '₹';
+        else if (cur === 'usd') currencySymbol = '$';
+        else if (cur === 'ngn') currencySymbol = '₦';
+        else if (cur === 'gbp') currencySymbol = '£';
+
+        const parsedUserId = userId ? parseInt(userId) : null;
+        if (parsedUserId) {
+            const user = await prisma.user.findUnique({ where: { id: parsedUserId } });
+            if (user) {
+                try {
+                    await sendNotificationEmail({
+                        to: user.email,
+                        subject: "Payment Failed",
+                        template: "mail_template",
+                        context: {
+                            title: "Payment Failed",
+                            message: `We couldn’t process your subscription payment. Please check your details or try again.`
+                        }
+                    });
+
+                    await sendNotification({
+                        toUserIds: parsedUserId,
+                        title: 'Payment Failed',
+                        content: `Payment for your subscription didn’t go through. Please update your payment details.`,
+                        sendFCM: true
+                    });
+
+                    const admins = await prisma.admin.findMany();
+                    await Promise.all(admins.map(async (admin) => {
+                        await createNormalNotificationForAdmin({
+                            toAdminId: admin.id,
+                            byUserId: user.id,
+                            title: 'Plan Payment Failed',
+                            content: `Payment attempt failed for User ${user.full_name || user.email}. Plan: ${plan ? plan.plan_name : 'Unknown'}.`
+                        });
+                    }));
+                } catch (notifyErr) {
+                    console.error("⚠️ Failed notification error:", notifyErr);
+                }
+            }
+        }
+
+        if (req.method === 'POST' || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+            return res.status(200).json({
+                success: false,
+                status: 400,
+                message: "Payment failed or cancelled"
+            });
+        }
+
+        const dashboardUrl = process.env.DASHBOARD_URL || process.env.FRONTEND_URL || process.env.BASE_URL || "https://securpoint.app:4000";
+        const logoUrl = process.env.LOGO_URL || `${process.env.BASE_URL || "https://securpoint.app:4000"}/mainLogo.png`;
+
+        return res.render(
+            path.join(__dirname, '../view/failed.ejs'),
+            {
+                user: userId,
+                plan: plan,
+                currencySymbol,
+                price: price || (cur && plan && plan[cur]) || (plan ? plan.amount : ''),
+                dashboardUrl,
+                logoUrl
+            }
+        );
+    } catch (error) {
+        console.error("❌ Error in stripeFailedPurchasePlan:", error);
+        if (req.method === 'POST' || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+            return res.status(500).json({
+                success: false,
+                status: 500,
+                message: "Internal server error",
+                error: error.message
+            });
+        }
+        return res.status(500).send("Internal server error while processing payment failure");
     }
-
-
-    const plan = await prisma.plan.findUnique({
-        where: { id: parseInt(planId) }
-    });
-
-    if (!plan) {
-        return res.status(404).json({ message: "Plan not found" });
-    }
-
-    const existingSubscription = await prisma.userSubscription.findFirst({
-        where: { userId: parseInt(userId), sub_status: 1 }
-    });
-
-    const startDate = new Date();
-    const expiredAt = new Date(startDate);
-    expiredAt.setMonth(startDate.getMonth() + plan.plan_days);
-
-    // const newSubscription = await prisma.userSubscription.create({
-    //     data: {
-    //         planId: parseInt(planId),
-    //         userId: parseInt(userId),
-    //         start_date: startDate,
-    //         expired_at: expiredAt,
-    //         sub_status: 1,  // Active status
-    //         overlap_status: 0,  // Default value
-    //         refund_status: 0,  // Default value
-    //         overlap_date: expiredAt,  // Assuming overlap date is the same as expiry date
-    //     }
-    // });
-
-    // await prisma.user.update({
-    //     where: { id: parseInt(userId) },
-    //     data: { promotedAssetCount: 0 }
-    // });
-
-    const user = await prisma.user.findUnique({ where: { id: parseInt(userId) } });
-    const mail = await sendNotificationEmail({ to: user.email, subject: "Payment Failed", template: "mail_template", context: { title: "Payment Failed", message: `We couldn’t process your subscription payment. Please check your details or try again.` }, });
-
-    const notification = await sendNotification({ toUserIds: parseInt(userId), title: 'Payment Failed', content: `Payment for your subscription didn’t go through. Please update your payment details.`, sendFCM: true });
-
-    const admin = await prisma.admin.findMany();
-    await Promise.all(admin.map(async (admin) => {
-        const adminNotification = await createNormalNotificationForAdmin({ toAdminId: admin.id, byUserId: user.id, title: 'Plan Purchased', content: `Payment attempt failed for User ${user.full_name}. Plan: ${plan.plan_name}.` });
-    }))
-
-    return res.status(200).json({
-        success: false
-    });
-    // // Create a URL for the confirmation page
-    // const confirmationUrl = `${process.env.FRONTEND_URL}/confirmation?session_id=${session_id}`;
-
-    // res.json({ confirmationUrl });
 };
 
 

@@ -105,6 +105,8 @@ const initializeSocketIO = (io) => {
           lastSeen:null
         }
       })
+      // 🟢 1. Sabhi dusre users ko inform karein ki user online aa gaya hai
+      socket.broadcast.emit("userOnline", { userId: user.id });
       socket.emit(ChatEventEnum.CONNECTED_EVENT);
       console.log("User connected 🗼. userId: ", user.id);
 
@@ -114,20 +116,30 @@ const initializeSocketIO = (io) => {
       mountParticipantStoppedTypingEvent(socket);
 
       socket.on(ChatEventEnum.DISCONNECT_EVENT, async() => {
-        console.log("user has disconnected 🚫. userId: " + socket.id);
-        await prisma.user.update({
-          where:{
-            id:socket.user.id
-          },
-          data:{
-            lastSeen: new Date()
-          }
-        })
-        await prisma.activeChat.deleteMany({
-          where:{
-            userId:socket.user.id
-          }
-        })
+        console.log("user has disconnected 🚫. userId: " + socket.user?.id);
+        if (socket.user?.id) {
+          const now = new Date();
+          // 🔴 2. Database mein isOnline: 0 aur lastSeen update karein
+          await prisma.user.update({
+            where:{
+              id:socket.user.id
+            },
+            data:{
+              isOnline: 0,
+              lastSeen: now
+            }
+          });
+          await prisma.activeChat.deleteMany({
+            where:{
+              userId:socket.user.id
+            }
+          });
+          // 🔴 3. Sabhi dusre users ko inform karein ki user offline ho gaya hai
+          socket.broadcast.emit("userOffline", {
+            userId: socket.user.id,
+            lastSeen: now
+          });
+        }
         if (socket.id) {
           socket.leave(socket.id);
         }

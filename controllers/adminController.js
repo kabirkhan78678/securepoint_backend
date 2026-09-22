@@ -611,9 +611,14 @@ export async function getAllCategory(req, res) {
           contains: search
         }
       },
-      orderBy: {
-        id: 'desc'
-      }
+      orderBy: [
+        {
+          display_order: 'asc'
+        },
+        {
+          id: 'asc'
+        }
+      ]
     });
     console.log(categoryList);
     const formattedCategories = categoryList.map((category) => ({
@@ -680,6 +685,100 @@ export async function getAllSubCategory(req, res) {
   }
 }
 
+export async function reorderCategories(req, res) {
+  try {
+    const { categories } = req.body;
+
+    if (!Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Invalid or empty categories list",
+      });
+    }
+
+    const schema = Joi.array().items(
+      Joi.object({
+        id: Joi.number().integer().positive().required(),
+        display_order: Joi.number().integer().positive().required(),
+      })
+    ).min(1).required();
+
+    const { error } = schema.validate(categories);
+    if (error) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: error.details[0].message,
+      });
+    }
+
+    // Check for duplicate IDs and duplicate display_order values
+    const idSet = new Set();
+    const orderSet = new Set();
+
+    for (const item of categories) {
+      if (idSet.has(item.id)) {
+        return res.status(400).json({
+          status: 400,
+          success: false,
+          message: `Duplicate category ID detected: ${item.id}`,
+        });
+      }
+      idSet.add(item.id);
+
+      if (orderSet.has(item.display_order)) {
+        return res.status(400).json({
+          status: 400,
+          success: false,
+          message: `Duplicate display_order detected: ${item.display_order}`,
+        });
+      }
+      orderSet.add(item.display_order);
+    }
+
+    // Verify all category IDs exist in DB
+    const categoryIds = categories.map((c) => parseInt(c.id));
+    const existingCount = await prisma.category.count({
+      where: {
+        id: { in: categoryIds },
+      },
+    });
+
+    if (existingCount !== categoryIds.length) {
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "One or more category IDs are invalid or do not exist",
+      });
+    }
+
+    // Execute atomic update inside database transaction
+    await prisma.$transaction(
+      categories.map((cat) =>
+        prisma.category.update({
+          where: { id: parseInt(cat.id) },
+          data: { display_order: parseInt(cat.display_order) },
+        })
+      )
+    );
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "Categories reordered successfully",
+    });
+  } catch (error) {
+    console.error("Error reordering categories:", error);
+    return res.status(500).json({
+      status: 500,
+      message: "Internal Server Error",
+      success: false,
+      error: error.message || error,
+    });
+  }
+}
+
 export async function addCategory(req, res) {
   try {
     const { categoryName } = req.body;
@@ -713,10 +812,16 @@ export async function addCategory(req, res) {
       });
     }
 
+    const maxOrderCategory = await prisma.category.findFirst({
+      orderBy: { display_order: 'desc' }
+    });
+    const nextDisplayOrder = (maxOrderCategory?.display_order || 0) + 1;
+
     const addCategory = await prisma.category.create({
       data: {
         categoryName: categoryName,
         categoryImage: req.file && req.file.filename ? req.file.filename : null,
+        display_order: nextDisplayOrder,
       },
     });
     return res.json({

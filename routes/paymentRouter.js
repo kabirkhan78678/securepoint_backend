@@ -8,9 +8,11 @@ export const paymentRouter = express.Router();
 
 paymentRouter.post('/purchasePlan',auth,paymentThroughStripe);
 
-// paymentRouter.get('/success',stripeSuccessAndPurchasePlan);
+paymentRouter.get('/success', stripeSuccessAndPurchasePlan);
+paymentRouter.post('/success', stripeSuccessAndPurchasePlan);
 
-// paymentRouter.get('/failed',stripeFailedPurchasePlan);
+paymentRouter.get('/failed', stripeFailedPurchasePlan);
+paymentRouter.post('/failed', stripeFailedPurchasePlan);
 
 // Stripe calls this directly (server-to-server). Must receive the raw body for signature verification.
 paymentRouter.post('/stripewebhook', stripeWebhook);
