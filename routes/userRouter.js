@@ -1,5 +1,5 @@
 import express from "express";
-import { addAsset, createPassword, createContactUs, getLabels, deleteAccount, deleteAsset, deleteAssetImage, editAsset, editProfile, forgotPassword, getAllAssets, getAssetStatus, getCategories, getLastSeen, getMyActivePlans, getMyAssets, getMySavedAssets, getMySingleAsset, getPlans, getSingleAsset, getSubCategories, getUserById, homePage, publicAssetDetails, publicHomePage, login, myProfile, purchasePlan, reportAsset, reportProfile, resetPassword, saveOrUnSaveAsset, signupWithEmail, verifyForgetPasswordOtp, verifyOtpEmail, getFAQs, getMySettings, updateMySettings, getTermsAndConditions, privacyPolicy, getAllCategory, getAllSubCategory, emailPhoneUpdate, resendforgotPassword } from "../controllers/userController.js";
+import { addAsset, createPassword, createContactUs, getLabels, deleteAccount, deleteAsset, deleteAssetImage, editAsset, editProfile, forgotPassword, getAllAssets, getAssetStatus, getCategories, getLastSeen, getMyActivePlans, getMyAssets, getMySavedAssets, getMySingleAsset, getPlans, getSingleAsset, getSubCategories, getUserById, homePage, publicAssetDetails, publicHomePage, login, myProfile, purchasePlan, reportAsset, getReportAssetReasons, reportProfile, resetPassword, saveOrUnSaveAsset, signupWithEmail, verifyForgetPasswordOtp, verifyOtpEmail, getFAQs, getMySettings, updateMySettings, getTermsAndConditions, privacyPolicy, getAllCategory, getAllSubCategory, emailPhoneUpdate, resendforgotPassword } from "../controllers/userController.js";
 import { auth } from "../middlewares/auth.js";
 import { upload } from "../middlewares/upload.js";
 import { getcms } from "../controllers/adminController.js";
@@ -71,6 +71,7 @@ userRouter.delete('/asset/:id', auth, deleteAsset);
 userRouter.post('/reportUser', auth, reportProfile);
 
 userRouter.post('/reportAsset', auth, reportAsset);
+userRouter.get('/reportAssetReasons', getReportAssetReasons);
 
 userRouter.get('/assetStatus', auth, getAssetStatus);
 

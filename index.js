@@ -63,7 +63,7 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
 const io = new Server(httpServer, {
   pingTimeout: 60000,
   cors: {
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : true,
     credentials: true,
   },
 });

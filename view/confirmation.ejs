@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,35 +19,41 @@
       background-color: #f9f9f9;
       font-family: 'Open Sans', sans-serif;
     }
+
     .cardStyle {
       width: 500px;
       background: #fff;
       padding: 40px 30px;
       border-radius: 6px;
-      box-shadow: 0 0 6px rgba(0,0,0,0.15);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.15);
       text-align: center;
     }
+
     .ct_trade_logo {
       max-width: 120px;
       display: block;
       margin: 0 auto 20px;
     }
+
     .success-icon {
       font-size: 60px;
       color: #4CAF50;
       margin-bottom: 15px;
     }
+
     .title {
       font-size: 24px;
       font-weight: 700;
       color: #2F2D3B;
       margin-bottom: 10px;
     }
+
     .message {
       font-size: 16px;
       color: #555;
       margin-bottom: 25px;
     }
+
     .ct_custom_btn {
       display: inline-block;
       padding: 12px 24px;
@@ -57,6 +64,7 @@
       color: #fff;
       text-decoration: none;
     }
+
     footer.ct_footer_bg {
       background-color: #3c434e;
       padding: 15px;
@@ -70,35 +78,43 @@
 
 <body>
 
-<div class="mainDiv">
-  <div class="cardStyle">
+  <div class="mainDiv">
+    <div class="cardStyle">
 
-    <img src="<%= typeof logoUrl !== 'undefined' ? logoUrl : 'https://securpoint.app:4000/mainLogo.png' %>" class="ct_trade_logo">
+      <img src="<%= typeof logoUrl !== 'undefined' ? logoUrl : 'https://securpoint.app:4000/mainLogo.png' %>"
+        class="ct_trade_logo">
 
-    <i class="fa fa-check-circle success-icon"></i>
+      <i class="fa fa-check-circle success-icon"></i>
 
-    <h2 class="title">Payment Successful</h2>
+      <h2 class="title">Payment Successful</h2>
 
-    <p class="message">
-      Thank you! Your subscription purchase has been successfully completed.
-    </p>
+      <p class="message">
+        Thank you! Your subscription purchase has been successfully completed.
+      </p>
 
-    <p class="message">
-      <strong>Plan:</strong> <%= (typeof plan !== 'undefined' && plan) ? plan.plan_name : 'Premium' %> <br>
-      <% if (typeof plan !== 'undefined' && plan && plan.plan_days) { %>
-        <strong>Duration:</strong> <%= plan.plan_days %> Month(s) <br>
-      <% } %>
-      <strong>Amount Paid:</strong> <%= (typeof currencySymbol !== 'undefined' ? currencySymbol : '$') %> <%= (typeof price !== 'undefined' && price) ? price : (typeof plan !== 'undefined' && plan ? plan.amount : '') %>
-    </p>
+      <p class="message">
+        <strong>Plan:</strong>
+        <%= (typeof plan !=='undefined' && plan) ? plan.plan_name : 'Premium' %> <br>
+          <% if (typeof plan !=='undefined' && plan && plan.plan_days) { %>
+            <strong>Duration:</strong>
+            <%= plan.plan_days %> Month(s) <br>
+              <% } %>
+                <strong>Amount Paid:</strong>
+                <%= (typeof currencySymbol !=='undefined' ? currencySymbol : '$' ) %>
+                  <%= (typeof price !=='undefined' && price) ? price : (typeof plan !=='undefined' && plan ? plan.amount
+                    : '' ) %>
+      </p>
 
-    <a href="<%= typeof dashboardUrl !== 'undefined' ? dashboardUrl : 'https://securpoint.app:4000' %>" class="ct_custom_btn">Go to Dashboard</a>
+      <a href="<%= typeof dashboardUrl !== 'undefined' ? dashboardUrl : 'https://securpoint.app:4000' %>"
+        class="ct_custom_btn">Go to Website</a>
 
+    </div>
   </div>
-</div>
 
-<footer class="ct_footer_bg">
-  <div>© Copyright <strong>SecurPoint</strong>. All Rights Reserved</div>
-</footer>
+  <footer class="ct_footer_bg">
+    <div>© Copyright <strong>SecurPoint</strong>. All Rights Reserved</div>
+  </footer>
 
 </body>
+
 </html>

@@ -3904,25 +3904,75 @@ export async function reportProfile(req, res) {
     }
 }
 
+export const REPORT_ASSET_OPTIONS = [
+    { id: 1, name: 'Stolen', value: 'stolen' },
+    { id: 2, name: 'Lost', value: 'lost' },
+    { id: 3, name: 'In Dispute', value: 'in dispute' }
+];
+
+export async function getReportAssetReasons(req, res) {
+    try {
+        return res.status(200).json({
+            status: 200,
+            message: 'Report Asset Options',
+            success: true,
+            options: [
+                { id: 1, name: 'Stolen' },
+                { id: 2, name: 'Lost' },
+                { id: 3, name: 'In Dispute' }
+            ]
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            status: 500,
+            message: 'Internal Server Error',
+            success: false,
+            error: error.message
+        });
+    }
+}
+
 export async function reportAsset(req, res) {
     try {
-        let { assetId, reason } = req.body;
-        const schema = Joi.alternatives(
-            Joi.object({
-                reason: Joi.string().optional(),
-                assetId: Joi.number().required(),
-            })
-        )
+        let { assetId, reason, option } = req.body;
+        const schema = Joi.object({
+            assetId: Joi.number().required(),
+            reason: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+            option: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+        });
         console.log("body", req.body)
         const result = schema.validate(req.body);
         if (result.error) {
             const message = result.error.details.map((i) => i.message).join(",");
-            return res.json({
+            return res.status(400).json({
                 message: result.error.details[0].message,
                 error: message,
                 missingParams: result.error.details[0].message,
                 status: 400,
                 success: false,
+            });
+        }
+
+        const inputVal = reason !== undefined && reason !== null ? reason : option;
+        let finalReason = null;
+
+        if (inputVal === 1 || inputVal === '1' || (typeof inputVal === 'string' && inputVal.trim().toLowerCase() === 'stolen')) {
+            finalReason = 'Stolen';
+        } else if (inputVal === 2 || inputVal === '2' || (typeof inputVal === 'string' && inputVal.trim().toLowerCase() === 'lost')) {
+            finalReason = 'Lost';
+        } else if (inputVal === 3 || inputVal === '3' || (typeof inputVal === 'string' && inputVal.trim().toLowerCase() === 'in dispute')) {
+            finalReason = 'In Dispute';
+        } else {
+            return res.status(400).json({
+                status: 400,
+                message: 'Please select a valid report option: 1 (Stolen), 2 (Lost), or 3 (In Dispute)',
+                success: false,
+                options: [
+                    { id: 1, name: 'Stolen' },
+                    { id: 2, name: 'Lost' },
+                    { id: 3, name: 'In Dispute' }
+                ]
             });
         }
 
@@ -3969,7 +4019,7 @@ export async function reportAsset(req, res) {
             data: {
                 assetId: assetId,
                 reportedBy: req.user.id,
-                reason: reason
+                reason: finalReason
             }
         })
 
@@ -3985,26 +4035,24 @@ export async function reportAsset(req, res) {
         }
 
         const user = await prisma.user.findUnique({ where: { id: asset.userId } });
-        const mail = await sendNotificationEmail({ to: user.email, subject: "Asset Reported", template: "mail_template", context: { title: "Asset Reported", message: `We’ve received a report regarding your listing ‘${asset.AssetName}’. Our team will review it in line with our guidelines.` }, });
+        const mail = await sendNotificationEmail({ to: user.email, subject: "Asset Reported", template: "mail_template", context: { title: "Asset Reported", message: `We’ve received a report regarding your listing ‘${asset.AssetName}’ as ${finalReason}. Our team will review it in line with our guidelines.` }, });
 
-        const notification = await sendNotification({ toUserIds: user.id, title: 'Asset Reported', content: `Your asset ‘${asset.AssetName}’ has been reported and is under review.`, sendFCM: user.fcm_token, data: JSON.stringify({ assetId: asset.id }) });
+        const notification = await sendNotification({ toUserIds: user.id, title: 'Asset Reported', content: `Your asset ‘${asset.AssetName}’ has been reported as ${finalReason} and is under review.`, sendFCM: user.fcm_token, data: JSON.stringify({ assetId: asset.id }) });
 
 
         const admin = await prisma.admin.findMany();
+        const myUser = await prisma.user.findUnique({ where: { id: req.user.id } });
         await Promise.all(admin.map(async (admin) => {
-            const adminNotification = await createNormalNotificationForAdmin({ toAdminId: admin.id, byUserId: user.id, title: 'Asset Reported', content: `Asset Ref: ‘${asset.AssetName}’ has been flagged as suspicious by User ${user.full_name}. Action required.` });
+            const adminNotification = await createNormalNotificationForAdmin({ toAdminId: admin.id, byUserId: myUser.id, title: 'Asset Reported', content: `Asset Ref: ‘${asset.AssetName}’ has been reported as ${finalReason} by User ${myUser.full_name}. Action required.` });
         }))
 
-        console.log("req.user.id", req.user.id)
-        const myUser = await prisma.user.findUnique({ where: { id: req.user.id } });
-        const mymail = await sendNotificationEmail({ to: myUser.email, subject: "Asset Reported", template: "mail_template", context: { title: "Asset Reported", message: `You’ve flagged an asset for review. We’ll investigate and update you if needed` }, });
-
-
+        const mymail = await sendNotificationEmail({ to: myUser.email, subject: "Asset Reported", template: "mail_template", context: { title: "Asset Reported", message: `You’ve flagged ‘${asset.AssetName}’ as ${finalReason} for review. We’ll investigate and update you if needed.` }, });
 
         return res.status(200).json({
             status: 200,
             message: 'Thanks for reporting. We’ll review this asset shortly.',
             success: true,
+            reportedReason: finalReason
         })
 
     } catch (error) {
