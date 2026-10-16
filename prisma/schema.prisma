@@ -75,7 +75,7 @@ model Asset {
   AssetDetails    String?       @db.LongText
   AssetIdentifier String        @db.VarChar(255)
   categoryId      Int
-  subCategoryId   Int
+  subCategoryId   Int?
   lock            Int           @default(1)
   promote         Int           @default(0)
   reviewStatus    Int? // NULL = No report, 0 = Pending, 1 = Awaiting user fix, 2 = Resolved
@@ -91,7 +91,7 @@ model Asset {
   blockStatus     Int           @default(1)
   isVisible       Boolean       @default(true)
   category        Category      @relation(fields: [categoryId], references: [id])
-  subCategory     SubCategory   @relation(fields: [subCategoryId], references: [id])
+  subCategory     SubCategory?  @relation(fields: [subCategoryId], references: [id])
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   AssetImages     AssetImages[]
   ReportAsset     ReportAsset[]
@@ -410,10 +410,10 @@ model AdminNotification {
 }
 
 model ContactUs {
-  id           Int       @id @default(autoincrement())
-  full_name    String?   @db.LongText
-  email        String?   @db.LongText
-  phone_number String?   @db.VarChar(20)
-  message      String?   @db.LongText
-  created_at   DateTime  @default(now())
+  id           Int      @id @default(autoincrement())
+  full_name    String?  @db.LongText
+  email        String?  @db.LongText
+  phone_number String?  @db.VarChar(20)
+  message      String?  @db.LongText
+  created_at   DateTime @default(now())
 }

@@ -486,7 +486,7 @@ export async function createPassword(req, res, next) {
 export async function login(req, res) {
     try {
         const secretKey = process.env.SECRET_KEY;
-        console.log(">>>>>>>>>>>>>>>", req.body)
+        // console.log(">>>>>>>>>>>>>>>", req.body)
         const { email, password, fcm_token, phone_no, country } = req.body;
         const schema = Joi.alternatives(
             Joi.object({
@@ -517,11 +517,13 @@ export async function login(req, res) {
         } else {
 
             if (email) {
+
                 const user = await prisma.user.findUnique({
                     where: {
                         email: email
                     }
                 })
+                console.log("user =>", user);
                 console.log('user', user);
                 if (!user || !(await bcrypt.compare(password, user.password))) {
 
@@ -605,7 +607,7 @@ export async function login(req, res) {
                 });
             }
             else if (phone_no) {
-                console.log(">>>>>>>>>>")
+                // console.log(">>>>>>>>>>")
                 const user = await prisma.user.findFirst({
                     where: {
                         phone_no: phone_no
@@ -1478,14 +1480,6 @@ export const addAsset = async (req, res) => {
                 }
             })
 
-            if (promote && parseInt(promote) !== 0) {
-                return res.status(400).json({
-                    status: 400,
-                    message: 'Cannot promote assset in free plan. Please upgrade your plan.',
-                    success: false,
-                })
-            }
-
             if (req.user.promotedAssetCount >= 2) {
                 return res.status(400).json({
                     status: 400,
@@ -1493,15 +1487,22 @@ export const addAsset = async (req, res) => {
                     success: false,
                 })
             }
-            // if (parseInt(promote) !== 0 && req.user.promotedAssetCount === 2) {
-            //     return res.status(400).json({
-            //         status: 400,
-            //         message: 'You can only promote up to two assets on the Free plan. Please upgrade your plan.',
-            //         success: false,
-            //     })
-            // }
 
-            expireAt = new Date(currentDate.setDate(currentDate.getDate())).toISOString().split('T')[0];
+            if (parseInt(promote) === 1) {
+                const d = new Date();
+                d.setDate(d.getDate() + 7);
+                expireAt = d.toISOString().split('T')[0];
+            } else if (parseInt(promote) === 2) {
+                const d = new Date();
+                d.setDate(d.getDate() + 14);
+                expireAt = d.toISOString().split('T')[0];
+            } else if (parseInt(promote) === 4) {
+                const d = new Date();
+                d.setDate(d.getDate() + 28);
+                expireAt = d.toISOString().split('T')[0];
+            } else {
+                expireAt = new Date().toISOString().split('T')[0];
+            }
             const asset = await prisma.asset.create({
                 data: {
                     AssetName: AssetName,
@@ -1559,20 +1560,17 @@ export const addAsset = async (req, res) => {
 
 
         if (parseInt(promote) === 1) {
-            expireAt = new Date(currentDate.setDate(currentDate.getDate() + 7)).toISOString().split('T')[0];
+            const d = new Date();
+            d.setDate(d.getDate() + 7);
+            expireAt = d.toISOString().split('T')[0];
         } else if (parseInt(promote) === 2) {
-            expireAt = new Date(currentDate.setDate(currentDate.getDate() + 14)).toISOString().split('T')[0];
+            const d = new Date();
+            d.setDate(d.getDate() + 14);
+            expireAt = d.toISOString().split('T')[0];
         } else if (parseInt(promote) === 4) {
-            expireAt = new Date(currentDate.setDate(currentDate.getDate() + 28)).toISOString().split('T')[0];
-        }
-        console.log('>>>>>', expireAt);
-        console.log('>>>', myPlan.myPlan.expired_at.toISOString().split('T')[0])
-        if (expireAt > myPlan.myPlan.expired_at.toISOString().split('T')[0]) {
-            return res.status(400).json({
-                status: 400,
-                message: 'The promoted asset expiry time exceeds your current plans expiry time. Please upgrade your plan.',
-                success: false,
-            })
+            const d = new Date();
+            d.setDate(d.getDate() + 28);
+            expireAt = d.toISOString().split('T')[0];
         }
 
         const asset = await prisma.asset.create({
@@ -1631,39 +1629,91 @@ export const addAsset = async (req, res) => {
 export async function getMySingleAsset(req, res) {
     try {
         const { id } = req.params;
+        const parsedId = parseInt(id);
+        if (isNaN(parsedId)) {
+            return res.status(400).json({
+                status: 400,
+                message: 'Invalid asset ID',
+                success: false
+            });
+        }
+
         const asset = await prisma.asset.findUnique({
             where: {
-                id: parseInt(id),
+                id: parsedId,
                 userId: req.user.id
             },
             include: {
                 AssetImages: true,
-                user: true
+                user: true,
+                category: true,
+                subCategory: true
             }
-        })
+        });
 
-        for (let i = 0; i < asset.AssetImages.length; i++) {
-            asset.AssetImages[i].image_url = `${baseurl}/images/${asset.AssetImages[i].image_url}`
+        if (!asset) {
+            return res.status(404).json({
+                status: 404,
+                message: 'Asset Not Found',
+                success: false
+            });
         }
-        if (asset.user.avatar_url) {
-            asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`
+
+        const assetCount = await prisma.asset.count({
+            where: {
+                userId: req.user.id
+            }
+        });
+
+        const joinedDate = asset.user?.createdAt || null;
+
+        if (asset.AssetImages?.length > 0) {
+            for (let i = 0; i < asset.AssetImages.length; i++) {
+                asset.AssetImages[i].image_url = asset.AssetImages[i].image_url
+                    ? `${baseurl}/images/${asset.AssetImages[i].image_url}`
+                    : null;
+            }
+        }
+        if (asset.user?.avatar_url) {
+            asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`;
+        }
+
+        const isMissing = asset.status ? asset.status.trim().toLowerCase() === 'missing' : false;
+
+        if (asset.user) {
+            asset.user.assetCount = assetCount;
+            asset.user.asset_count = assetCount;
+            asset.user.joined = joinedDate;
+            asset.user.joinedDate = joinedDate;
+            delete asset.user.password;
         }
 
         return res.status(200).json({
             status: 200,
             message: 'Asset Fetched Successfully',
             success: true,
-            asset
-        })
+            assetCount,
+            joinedDate,
+            joined: joinedDate,
+            is_missing: isMissing,
+            isMissing: isMissing,
+            asset: {
+                ...asset,
+                assetCount,
+                joinedDate,
+                joined: joinedDate,
+                is_missing: isMissing,
+                isMissing: isMissing
+            }
+        });
     } catch (error) {
         console.log(error);
         return res.status(500).json({
-            status: 200,
+            status: 500,
             message: 'Internal Server Error',
             success: false,
-            error: error
-        })
-
+            error: error.message || error
+        });
     }
 }
 
@@ -1808,6 +1858,8 @@ export async function getMyAssets(req, res) {
                 });
 
                 asset.alreadySaved = !!checkSaved;
+                asset.is_missing = asset.status ? asset.status.trim().toLowerCase() === 'missing' : false;
+                asset.isMissing = asset.is_missing;
 
                 if (asset.user?.avatar_url) {
                     asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`;
@@ -2076,6 +2128,8 @@ export async function getAllAssets(req, res) {
                 });
 
                 asset.alreadySaved = !!checkSaved;
+                asset.is_missing = asset.status ? asset.status.trim().toLowerCase() === 'missing' : false;
+                asset.isMissing = asset.is_missing;
 
                 if (asset.user?.avatar_url) {
                     asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`;
@@ -2215,14 +2269,19 @@ export async function editAsset(req, res) {
             //         success: false,
             //     })
             // }
-            if (promote && parseInt(promote) !== 0) {
-                return res.status(400).json({
-                    status: 400,
-                    message: 'Cannot promote assset in free plan. Please upgrade your plan.',
-                    success: false,
-                })
+            if (parseInt(promote) === 1) {
+                const d = new Date();
+                d.setDate(d.getDate() + 7);
+                expireAt = d.toISOString().split('T')[0];
+            } else if (parseInt(promote) === 2) {
+                const d = new Date();
+                d.setDate(d.getDate() + 14);
+                expireAt = d.toISOString().split('T')[0];
+            } else if (parseInt(promote) === 4) {
+                const d = new Date();
+                d.setDate(d.getDate() + 28);
+                expireAt = d.toISOString().split('T')[0];
             }
-            expireAt = new Date(currentDate.setDate(currentDate.getDate())).toISOString().split('T')[0];
             await prisma.asset.update({
                 where: {
                     id: parseInt(id)
@@ -2272,19 +2331,17 @@ export async function editAsset(req, res) {
 
         if (parseInt(promote) !== 0) {
             if (parseInt(promote) === 1) {
-                expireAt = new Date(currentDate.setDate(currentDate.getDate() + 7)).toISOString().split('T')[0];
+                const d = new Date();
+                d.setDate(d.getDate() + 7);
+                expireAt = d.toISOString().split('T')[0];
             } else if (parseInt(promote) === 2) {
-                expireAt = new Date(currentDate.setDate(currentDate.getDate() + 14)).toISOString().split('T')[0];
+                const d = new Date();
+                d.setDate(d.getDate() + 14);
+                expireAt = d.toISOString().split('T')[0];
             } else if (parseInt(promote) === 4) {
-                expireAt = new Date(currentDate.setDate(currentDate.getDate() + 28)).toISOString().split('T')[0];
-            }
-
-            if (expireAt > myPlan.myPlan.expired_at.toISOString().split('T')[0]) {
-                return res.status(400).json({
-                    status: 400,
-                    message: 'The promoted asset expiry time exceeds your current plans expiry time. Please upgrade your plan.',
-                    success: false,
-                })
+                const d = new Date();
+                d.setDate(d.getDate() + 28);
+                expireAt = d.toISOString().split('T')[0];
             }
             await prisma.asset.update({
                 where: {
@@ -2772,8 +2829,12 @@ export async function publicHomePage(req, res) {
                 assetData.user.avatar_url = `${baseurl}/images/${assetData.user.avatar_url}`;
             }
 
+            const isMissing = assetData.status ? assetData.status.trim().toLowerCase() === 'missing' : false;
+
             return {
                 ...assetData,
+                is_missing: isMissing,
+                isMissing: isMissing,
                 category: assetCategoryMap.get(assetData.categoryId) || null,
                 subCategory: assetSubCategoryMap.get(assetData.subCategoryId) || null,
                 isFeatured: assetData.promote > 0
@@ -3014,7 +3075,8 @@ export async function publicAssetDetails(req, res) {
                     select: {
                         id: true,
                         full_name: true,
-                        avatar_url: true
+                        avatar_url: true,
+                        createdAt: true
                     }
                 }
             }
@@ -3101,7 +3163,8 @@ export async function publicAssetDetails(req, res) {
                         select: {
                             id: true,
                             full_name: true,
-                            avatar_url: true
+                            avatar_url: true,
+                            createdAt: true
                         }
                     }
                 },
@@ -3124,6 +3187,13 @@ export async function publicAssetDetails(req, res) {
 
             relatedAssets = [];
         }
+
+        const assetCount = await prisma.asset.count({
+            where: {
+                userId: asset.userId
+            }
+        });
+        const joinedDate = asset.user?.createdAt || null;
 
         // FORMAT FUNCTION
         const formatAsset = async (item) => {
@@ -3158,9 +3228,31 @@ export async function publicAssetDetails(req, res) {
                 }
             }
 
+            const itemAssetCount = item.assetCount !== undefined
+                ? item.assetCount
+                : await prisma.asset.count({
+                    where: {
+                        userId: item.userId
+                    }
+                });
+
+            const itemJoinedDate = item.joinedDate || item.user?.createdAt || null;
+
+            const isMissing = item.status ? item.status.trim().toLowerCase() === 'missing' : false;
+
             return {
 
                 ...item,
+
+                assetCount: itemAssetCount,
+
+                joinedDate: itemJoinedDate,
+
+                joined: itemJoinedDate,
+
+                is_missing: isMissing,
+
+                isMissing: isMissing,
 
                 category: itemCategory || null,
 
@@ -3176,6 +3268,10 @@ export async function publicAssetDetails(req, res) {
                 user: item.user
                     ? {
                         ...item.user,
+                        assetCount: itemAssetCount,
+                        asset_count: itemAssetCount,
+                        joined: itemJoinedDate,
+                        joinedDate: itemJoinedDate,
                         avatar_url: item.user.avatar_url
                             ? `${baseurl}/images/${item.user.avatar_url}`
                             : null
@@ -3186,17 +3282,37 @@ export async function publicAssetDetails(req, res) {
             };
         };
 
+        const isMainAssetMissing = asset.status ? asset.status.trim().toLowerCase() === 'missing' : false;
+
+        if (asset.user) {
+            asset.user.assetCount = assetCount;
+            asset.user.asset_count = assetCount;
+            asset.user.joined = joinedDate;
+            asset.user.joinedDate = joinedDate;
+        }
+
+        const formattedMainAsset = await formatAsset({
+            ...asset,
+            assetCount,
+            joinedDate,
+            joined: joinedDate,
+            is_missing: isMainAssetMissing,
+            isMissing: isMainAssetMissing,
+            category,
+            subCategory
+        });
+
         // FINAL RESPONSE
         return res.status(200).json({
             status: 200,
             success: true,
             message: "Public asset details fetched successfully",
-
-            asset: await formatAsset({
-                ...asset,
-                category,
-                subCategory
-            }),
+            assetCount,
+            joinedDate,
+            joined: joinedDate,
+            is_missing: isMainAssetMissing,
+            isMissing: isMainAssetMissing,
+            asset: formattedMainAsset,
 
             relatedAssets: await Promise.all(
                 relatedAssets.map(formatAsset)
@@ -3219,47 +3335,100 @@ export async function publicAssetDetails(req, res) {
 export async function getSingleAsset(req, res) {
     try {
         const { id } = req.params;
+        const parsedId = parseInt(id);
+        if (isNaN(parsedId)) {
+            return res.status(400).json({
+                status: 400,
+                message: 'Invalid asset ID',
+                success: false
+            });
+        }
+
         const asset = await prisma.asset.findUnique({
             where: {
-                id: parseInt(id),
+                id: parsedId,
             },
             include: {
                 AssetImages: true,
-                user: true
+                user: true,
+                category: true,
+                subCategory: true
             }
-        })
+        });
+
+        if (!asset) {
+            return res.status(404).json({
+                status: 404,
+                message: 'Asset Not Found',
+                success: false
+            });
+        }
+
         const checkSaved = await prisma.saveAsset.findFirst({
             where: {
                 assetId: asset.id,
                 saveByUserId: req.user.id
             }
-        })
-        let alreadySaved = false;
-        if (checkSaved) {
-            alreadySaved = true
-        }
-        for (let i = 0; i < asset.AssetImages.length; i++) {
-            asset.AssetImages[i].image_url = `${baseurl}/images/${asset.AssetImages[i].image_url}`
+        });
+        const alreadySaved = !!checkSaved;
+
+        const assetCount = await prisma.asset.count({
+            where: {
+                userId: asset.userId
+            }
+        });
+
+        const joinedDate = asset.user?.createdAt || null;
+
+        if (asset.AssetImages?.length > 0) {
+            for (let i = 0; i < asset.AssetImages.length; i++) {
+                asset.AssetImages[i].image_url = asset.AssetImages[i].image_url
+                    ? `${baseurl}/images/${asset.AssetImages[i].image_url}`
+                    : null;
+            }
         }
 
-        if (asset.user.avatar_url) {
-            asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`
+        if (asset.user?.avatar_url) {
+            asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`;
+        }
+
+        const isMissing = asset.status ? asset.status.trim().toLowerCase() === 'missing' : false;
+
+        if (asset.user) {
+            asset.user.assetCount = assetCount;
+            asset.user.asset_count = assetCount;
+            asset.user.joined = joinedDate;
+            asset.user.joinedDate = joinedDate;
+            delete asset.user.password;
         }
 
         return res.status(200).json({
             status: 200,
             message: 'Asset Fetched Successfully',
             success: true,
-            asset: { ...asset, alreadySaved }
-        })
+            assetCount,
+            joinedDate,
+            joined: joinedDate,
+            is_missing: isMissing,
+            isMissing: isMissing,
+            asset: {
+                ...asset,
+                assetCount,
+                joinedDate,
+                joined: joinedDate,
+                is_missing: isMissing,
+                isMissing: isMissing,
+                alreadySaved
+            }
+        });
     } catch (error) {
         console.log(error);
         return res.status(500).json({
             status: 500,
             message: 'Internal Server Error',
             success: false,
-            error: error
-        })
+            error: error.message || error
+        });
 
     }
 }
@@ -3830,9 +3999,6 @@ export async function reportProfile(req, res) {
 
         userId = parseInt(userId);
 
-        const myPlan = await getActivePlanForUser(req.user.id);
-        const myActivePlan = myPlan.myPlan.plan;
-
         const user = await prisma.user.findUnique({
             where: {
                 id: parseInt(userId)
@@ -4064,6 +4230,209 @@ export async function reportAsset(req, res) {
             error: error
         })
 
+    }
+}
+
+export async function markAssetAsMissing(req, res) {
+    try {
+        const rawId = req.body?.assetId || req.params?.id || req.body?.id;
+        const missingNotes = req.body?.notes || req.body?.description || null;
+        const targetStatus = req.body?.status === "Safe" ? "Safe" : "Missing";
+
+        if (!rawId) {
+            return res.status(400).json({
+                status: 400,
+                message: "assetId is required",
+                success: false
+            });
+        }
+
+        const assetId = parseInt(rawId);
+        if (isNaN(assetId)) {
+            return res.status(400).json({
+                status: 400,
+                message: "Invalid assetId provided",
+                success: false
+            });
+        }
+
+        const asset = await prisma.asset.findUnique({
+            where: { id: assetId },
+            include: {
+                AssetImages: true,
+                category: true,
+                subCategory: true,
+                user: true
+            }
+        });
+
+        if (!asset) {
+            return res.status(404).json({
+                status: 404,
+                message: "Asset not found",
+                success: false
+            });
+        }
+
+        if (asset.userId !== req.user.id) {
+            return res.status(403).json({
+                status: 403,
+                message: "You are not authorized to mark this asset as missing. Only the owner can mark it.",
+                success: false
+            });
+        }
+
+        // Update asset status
+        const updatedAsset = await prisma.asset.update({
+            where: { id: asset.id },
+            data: {
+                status: targetStatus
+            },
+            include: {
+                AssetImages: true,
+                category: true,
+                subCategory: true,
+                user: true
+            }
+        });
+
+        // Format image URLs
+        if (updatedAsset.AssetImages && updatedAsset.AssetImages.length > 0) {
+            updatedAsset.AssetImages = updatedAsset.AssetImages.map((img) => ({
+                ...img,
+                image_url: img.image_url ? `${baseurl}/images/${img.image_url}` : null
+            }));
+        }
+
+        if (updatedAsset.user?.avatar_url) {
+            updatedAsset.user.avatar_url = `${baseurl}/images/${updatedAsset.user.avatar_url}`;
+        }
+
+        // If marked as Missing, broadcast notifications to all other users
+        if (targetStatus === "Missing") {
+            const alertTitle = `🚨 Missing Asset Alert: ${asset.AssetName || 'Asset'}`;
+            const alertBody = `${asset.AssetName || 'An asset'} (UIC: #${asset.UIC}) has been marked as Missing. Tap to view asset details.${missingNotes ? ` Note: ${missingNotes}` : ''}`;
+            const alertData = {
+                assetId: String(asset.id),
+                UIC: String(asset.UIC || ''),
+                AssetName: String(asset.AssetName || ''),
+                status: "Missing",
+                screen: "AssetDetail",
+                type: "MISSING_ASSET"
+            };
+
+            // 1. Send push notification and in-app notification to all other active users
+            const allUsers = await prisma.user.findMany({
+                where: {
+                    id: { not: req.user.id },
+                    status: 1
+                },
+                select: {
+                    id: true,
+                    fcm_token: true
+                }
+            });
+
+            if (allUsers.length > 0) {
+                const userIds = allUsers.map(u => u.id);
+                await sendNotification({
+                    toUserIds: userIds,
+                    title: alertTitle,
+                    content: alertBody,
+                    data: alertData,
+                    byUserId: req.user.id,
+                    type: "MISSING_ASSET",
+                    sendFCM: true
+                });
+            }
+
+            // 2. Notify Admin
+            const admins = await prisma.admin.findMany();
+            await Promise.all(admins.map(async (admin) => {
+                await createNormalNotificationForAdmin({
+                    toAdminId: admin.id,
+                    byUserId: req.user.id,
+                    title: `Missing Asset Alert: ${asset.AssetName || 'Asset'}`,
+                    content: `Asset '${asset.AssetName}' (UIC: #${asset.UIC}) has been marked as Missing by User ${req.user.full_name || 'Owner'}.`,
+                    type: "MISSING_ASSET",
+                    data: alertData
+                });
+            }));
+
+            // 3. Emit real-time Socket.io event if socket is available
+            const io = req.app.get("io");
+            if (io) {
+                io.emit("missingAssetAlert", {
+                    assetId: asset.id,
+                    assetName: asset.AssetName,
+                    UIC: asset.UIC,
+                    status: "Missing",
+                    owner: req.user.full_name,
+                    data: alertData
+                });
+            }
+
+            // 4. Send confirmation email to asset owner
+            if (req.user.email) {
+                sendNotificationEmail({
+                    to: req.user.email,
+                    subject: `Asset Marked as Missing - ${asset.AssetName}`,
+                    template: "mail_template",
+                    context: {
+                        title: "Asset Marked as Missing",
+                        message: `Your asset ‘${asset.AssetName}’ (UIC: #${asset.UIC}) has been marked as Missing. An alert has been broadcast to all registered users.`
+                    }
+                }).catch(e => console.error("Email error:", e.message));
+            }
+        }
+
+        // Calculate asset count and joined date
+        const assetCount = await prisma.asset.count({
+            where: {
+                userId: asset.userId
+            }
+        });
+        const joinedDate = updatedAsset.user?.createdAt || null;
+
+        const isMissing = updatedAsset.status ? updatedAsset.status.trim().toLowerCase() === 'missing' : false;
+        console.log("isMissing =>", isMissing);
+        if (updatedAsset.user) {
+            updatedAsset.user.assetCount = assetCount;
+            updatedAsset.user.asset_count = assetCount;
+            updatedAsset.user.joined = joinedDate;
+            updatedAsset.user.joinedDate = joinedDate;
+            delete updatedAsset.user.password;
+        }
+
+        return res.status(200).json({
+            status: 200,
+            message: targetStatus === "Missing"
+                ? "Asset marked as missing successfully. Alert has been broadcast to all users."
+                : "Asset marked as safe successfully.",
+            success: true,
+            assetCount,
+            joinedDate,
+            joined: joinedDate,
+            is_missing: isMissing,
+            isMissing: isMissing,
+            asset: {
+                ...updatedAsset,
+                assetCount,
+                joinedDate,
+                joined: joinedDate,
+                is_missing: isMissing,
+                isMissing: isMissing
+            }
+        });
+
+    } catch (error) {
+        console.error("markAssetAsMissing Error:", error);
+        return res.status(500).json({
+            status: 500,
+            message: "Internal Server Error",
+            success: false,
+            error: error.message
+        });
     }
 }
 
