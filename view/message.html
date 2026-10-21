@@ -3,24 +3,164 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Success</title>
+    <title>Password Reset Successful | SecurPoint</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="icon" href="https://securpoint.app:4000/mainLogo.png" type="image/x-icon">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" href="/mainLogo.png" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style type="text/css">
-    body{margin: 0;padding: 0;font-family: 'Montserrat', sans-serif;}
-    .success-box-wrap {min-height: calc(100vh - 61px);display: flex;justify-content: center;align-items: center;padding: 30px;}
-.success-box {background: #efefef;max-width: 350px;padding: 30px;text-align: center;border-radius: 20px;margin: 0 auto;}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        margin: 0;
+        padding: 20px;
+        font-family: 'Montserrat', sans-serif;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #ffffff;
+    }
+    .success-box-wrap {
+        width: 100%;
+        max-width: 460px;
+    }
+    .success-box {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 40px 32px;
+        text-align: center;
+        border-radius: 20px;
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+    .success-box::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 6px;
+        background: linear-gradient(90deg, #048eff, #065492);
+    }
+    .brand-logo {
+        max-height: 55px;
+        margin-bottom: 24px;
+        object-fit: contain;
+    }
+    .icon-wrapper {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #e0f2fe;
+    }
+    .icon-wrapper svg {
+        width: 44px;
+        height: 44px;
+        fill: none;
+        stroke: #048eff;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    h3 {
+        font-size: 24px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 12px;
+    }
+    p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #4b5563;
+        margin-bottom: 28px;
+    }
+    .btn-login {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 14px 24px;
+        background: linear-gradient(135deg, #048eff 0%, #065492 100%);
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(4, 142, 255, 0.35);
+        transition: all 0.2s ease;
+    }
+    .btn-login:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(4, 142, 255, 0.45);
+        color: #ffffff;
+    }
+    .countdown-text {
+        margin-top: 18px;
+        font-size: 12px;
+        color: #9ca3af;
+        font-weight: 500;
+    }
+    .countdown-number {
+        font-weight: 700;
+        color: #048eff;
+    }
+    .btn-home {
+        display: inline-block;
+        margin-top: 14px;
+        font-size: 13px;
+        color: #6b7280;
+        text-decoration: none;
+    }
+    .btn-home:hover {
+        color: #048eff;
+        text-decoration: underline;
+    }
     </style>
 </head>
 <body>
     <div class="success-box-wrap">
         <div class="success-box">
-            <img src="https://securpoint.app:4000/success-chk.png" title="Success" alt="Success Image"  align="center" width="100">
+            <img src="/mainLogo.png" alt="SecurPoint" class="brand-logo" onerror="this.src='/fav_icon.svg'">
+            <div class="icon-wrapper">
+                <svg viewBox="0 0 24 24">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
             <h3>Congratulations!</h3>
-            <p>Your Account Password Set successfully.</p>
+            <p>Your Account Password has been set successfully.<br>You can now sign in with your new password.</p>
+            <a id="loginBtn" href="https://securpoint.app/admin/login" class="btn-login">
+                Proceed to Login &rarr;
+            </a>
+            <div class="countdown-text">
+                Redirecting to login in <span class="countdown-number" id="countdown">5</span> seconds...
+            </div>
+            <div>
+                <a href="https://securpoint.app" class="btn-home">Go to SecurPoint Homepage</a>
+            </div>
         </div>
     </div>
+    <script>
+      (function() {
+        var seconds = 5;
+        var countdownEl = document.getElementById('countdown');
+        var loginUrl = "https://securpoint.app/admin/login";
+        var interval = setInterval(function() {
+          seconds--;
+          if (countdownEl) countdownEl.textContent = seconds;
+          if (seconds <= 0) {
+            clearInterval(interval);
+            window.location.href = loginUrl;
+          }
+        }, 1000);
+      })();
+    </script>
 </body>
 </html>

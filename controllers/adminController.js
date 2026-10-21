@@ -61,105 +61,86 @@ export async function login(req, res) {
   try {
     const secretKey = process.env.SECRET_KEY;
     const { email, password, fcm_token } = req.body;
-    const schema = Joi.alternatives(
-      Joi.object({
-        //email: Joi.string().min(5).max(255).email({ tlds: { allow: false } }).lowercase().required(),
-        email: Joi.string()
-          .min(5)
-          .max(255)
-          .email({ tlds: { allow: false } })
-          .lowercase()
-          .required(),
-        password: Joi.string().min(8).max(64).required().messages({
-          "any.required": "{{#label}} is required!!",
-          "string.empty": "can't be empty!!",
-          "string.min": "minimum 8 value required",
-          "string.max": "maximum 64 values allowed",
-        }),
-        fcm_token: Joi.string().optional(),
-      })
-    );
-    const result = schema.validate({ email, password, fcm_token });
+    const schema = Joi.object({
+      email: Joi.string()
+        .min(5)
+        .max(255)
+        .email({ tlds: { allow: false } })
+        .lowercase()
+        .trim()
+        .required(),
+      password: Joi.string().min(8).max(64).required().messages({
+        "any.required": "{{#label}} is required!!",
+        "string.empty": "can't be empty!!",
+        "string.min": "minimum 8 value required",
+        "string.max": "maximum 64 values allowed",
+      }),
+      fcm_token: Joi.string().optional().allow(null, ""),
+    });
+    const result = schema.validate(req.body);
 
     if (result.error) {
       const message = result.error.details.map((i) => i.message).join(",");
-      return res.json({
+      return res.status(400).json({
         message: result.error.details[0].message,
         error: message,
         missingParams: result.error.details[0].message,
         status: 400,
         success: false,
       });
-    } else {
-      const user = await prisma.admin.findUnique({
-        where: {
-          email: email,
+    }
+
+    const normalizedEmail = (result.value.email || email).trim().toLowerCase();
+
+    const user = await prisma.admin.findFirst({
+      where: {
+        email: {
+          equals: normalizedEmail,
         },
-      });
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid credentials",
-          status: 400,
-        });
-      }
-      // if (user.isVerified === false) {
-      //     return res.status(400).json({
-      //         message: "Please verify your account",
-      //         status: 400,
-      //         success: false
-      //     })
-      // }
-      if (fcm_token) {
-        await prisma.admin.update({
-          where: {
-            email: email,
-          },
-          data: {
-            fcm_token: fcm_token,
-          },
-        });
-      }
+      },
+    });
 
-      // const userData = await prisma.admin.findUnique({
-      //   where: {
-      //     email: email,
-      //   },
-      //    where: { role: 'SUBADMIN' },
-      // orderBy: { id: 'desc' },
-      // include: { Permission: { include: { feature: true } } }
-      // });
-
-      const userData = await prisma.admin.findUnique({
-        where: { email }
-      });
-
-      let result = userData;
-
-      if (userData?.role === 'SUBADMIN') {
-        result = await prisma.admin.findUnique({
-          where: { email },
-          include: {
-            Permission: {
-              include: { feature: true }
-            }
-          }
-        });
-      }
-
-      const token = jwt.sign(
-        { adminId: user.id, role: user.role, email: user.email },
-        secretKey,
-        { expiresIn: "3d" }
-      );
-      return res.json({
-        status: 200,
-        success: true,
-        message: "Login successful!",
-        token: token,
-        admin: result,
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid credentials",
+        status: 400,
       });
     }
+
+    if (fcm_token) {
+      await prisma.admin.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          fcm_token: fcm_token,
+        },
+      });
+    }
+
+    let resultUser = await prisma.admin.findUnique({
+      where: { id: user.id },
+      include: user.role === 'SUBADMIN' ? {
+        Permission: {
+          include: { feature: true }
+        }
+      } : undefined
+    });
+
+    const token = jwt.sign(
+      { adminId: user.id, role: user.role, email: user.email },
+      secretKey,
+      { expiresIn: "3d" }
+    );
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "Login successful!",
+      token: token,
+      admin: resultUser,
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -1922,13 +1903,17 @@ export const updateLabel = async (req, res) => {
   }
 
   try {
-    const cms = await prisma.label.update({
+    const cms = await prisma.label.upsert({
       where: { type: type },
-      data: {
+      update: {
+        content: content,
+      },
+      create: {
+        type: type,
         content: content,
       },
     });
-    const message = type == "ASSET" ? "Promoted Asset Content Updated Successfully " : "Label Content Updated Successfully"
+    const message = type == "ASSET" ? "Promoted Asset Content Updated Successfully " : "Label Content Updated Successfully";
     return res.status(200).json({
       status: 200,
       message: message,
@@ -1947,37 +1932,84 @@ export const updateLabel = async (req, res) => {
   }
 };
 
+export const createLabel = async (req, res) => {
+  return updateLabel(req, res);
+};
+
 export const getLabels = async (req, res) => {
   try {
-
-    const data = await prisma.label.findMany({
+    let data = await prisma.label.findMany({
+      orderBy: { id: 'asc' }
     });
+
+    const defaultLabels = [
+      {
+        type: 'MONITOR',
+        content: 'Monitor security status, receive real-time alerts, and track asset activity across all registered devices.'
+      },
+      {
+        type: 'LOCK',
+        content: 'Lock asset to prevent unauthorized transfers, modifications, or access until unlocked by the verified owner.'
+      },
+      {
+        type: 'PROMOTE',
+        content: 'Promote your asset to enhance visibility in public searches, community listings, and partner networks.'
+      },
+      {
+        type: 'ASSET',
+        content: 'Asset protection, ownership verification, and digital certificate management.'
+      }
+    ];
+
+    const existingTypes = new Set(data.map(item => item.type));
+    let missingFound = false;
+
+    for (const def of defaultLabels) {
+      if (!existingTypes.has(def.type)) {
+        await prisma.label.upsert({
+          where: { type: def.type },
+          update: {},
+          create: {
+            type: def.type,
+            content: def.content
+          }
+        });
+        missingFound = true;
+      }
+    }
+
+    if (missingFound) {
+      data = await prisma.label.findMany({
+        orderBy: { id: 'asc' }
+      });
+    }
 
     res.status(200).json({
       success: true,
       status: 200,
-      message: 'Lables',
+      message: 'Labels',
       data
     });
   } catch (error) {
     console.log(error);
     res.status(500).json({
       success: false,
-      status: error,
+      status: 500,
       message: 'Internal Server Error',
-      error: error
+      error: error.message || error
     });
   }
-}
+};
 
 
 // ================== CREATE ADMIN ==================
 export const createAdmin = async (req, res) => {
   try {
     const { email, password, features, phone_no, role, full_name } = req.body;
+    const normalizedEmail = (email || "").trim().toLowerCase();
 
-    const adminsEmail = await prisma.admin.findUnique({
-      where: { email: email },
+    const adminsEmail = await prisma.admin.findFirst({
+      where: { email: { equals: normalizedEmail } },
     });
 
     const adminsPhone = await prisma.admin.findFirst({
@@ -2698,17 +2730,40 @@ export async function forgotPassword(req, res) {
 export async function verifyPassword(req, res) {
   try {
     const { token } = req.params;
+    const dashboardUrl = (process.env.DASHBOARD_URL || process.env.FRONTEND_URL || "https://securpoint.app").replace(/\/home\/?$/i, "").replace(/\/$/, "");
+    const loginUrl = (process.env.ADMIN_LOGIN_URL || "https://securpoint.app/admin/login").replace(/\/home(?=\/admin\/login)/i, "");
+
     if (!token) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).render("resetSuccess.ejs", {
+          success: false,
+          message: "Token is required",
+          dashboardUrl,
+          loginUrl,
+        });
+      }
       return res.status(400).json({ status: 400, success: false, message: "Token required" });
     }
 
     const admin = await prisma.admin.findFirst({ where: { token } });
     if (!admin) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).render("resetSuccess.ejs", {
+          success: false,
+          message: "Invalid or expired reset token. Please request a new password reset.",
+          dashboardUrl,
+          loginUrl,
+        });
+      }
       return res.status(400).json({ status: 400, success: false, message: "Invalid token" });
     }
 
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      return res.render("forgetPassword.ejs", { token, baseUrl: process.env.BASE_URL || "https://securpoint.app:4000" });
+      return res.render("forgetPassword.ejs", {
+        token,
+        baseUrl: process.env.BASE_URL || "https://securpoint.app",
+        loginUrl
+      });
     }
 
     return res.status(200).json({ status: 200, success: true, message: "Token verified" });
@@ -2720,6 +2775,9 @@ export async function verifyPassword(req, res) {
 
 export async function changePassword(req, res) {
   try {
+    const dashboardUrl = (process.env.DASHBOARD_URL || process.env.FRONTEND_URL || "https://securpoint.app").replace(/\/home\/?$/i, "").replace(/\/$/, "");
+    const loginUrl = (process.env.ADMIN_LOGIN_URL || "https://securpoint.app/admin/login").replace(/\/home(?=\/admin\/login)/i, "");
+
     const schema = Joi.object({
       token: Joi.string().required(),
       password: Joi.string().min(8).max(64).required(),
@@ -2728,11 +2786,39 @@ export async function changePassword(req, res) {
 
     const { error, value } = schema.validate(req.body);
     if (error) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).render("resetSuccess.ejs", {
+          success: false,
+          message: error.details[0].message,
+          dashboardUrl,
+          loginUrl,
+        });
+      }
       return res.status(400).json({ status: 400, success: false, message: error.details[0].message });
+    }
+
+    if (value.confirm_password && value.password !== value.confirm_password) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).render("resetSuccess.ejs", {
+          success: false,
+          message: "Passwords do not match",
+          dashboardUrl,
+          loginUrl,
+        });
+      }
+      return res.status(400).json({ status: 400, success: false, message: "Passwords do not match" });
     }
 
     const admin = await prisma.admin.findFirst({ where: { token: value.token } });
     if (!admin) {
+      if (req.headers.accept && req.headers.accept.includes("text/html")) {
+        return res.status(400).render("resetSuccess.ejs", {
+          success: false,
+          message: "This password reset token is invalid or has expired.",
+          dashboardUrl,
+          loginUrl,
+        });
+      }
       return res.status(400).json({ status: 400, success: false, message: "Invalid token" });
     }
 
@@ -2743,10 +2829,20 @@ export async function changePassword(req, res) {
     });
 
     if (req.headers.accept && req.headers.accept.includes("text/html")) {
-      return res.sendFile(path.resolve(__dirname, "../view/message.html"));
+      return res.render("resetSuccess.ejs", {
+        success: true,
+        message: "Your password has been reset successfully.",
+        dashboardUrl,
+        loginUrl,
+      });
     }
 
-    return res.status(200).json({ status: 200, success: true, message: "Password updated successfully" });
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "Password updated successfully",
+      loginUrl,
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ status: 500, success: false, message: "Internal Server Error", error });

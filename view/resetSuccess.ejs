@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= typeof success !== 'undefined' && success ? 'Password Reset Successful' : 'Password Reset' %> | SecurPoint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="/mainLogo.png" type="image/x-icon">
+  <style type="text/css">
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Montserrat', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #ffffff;
+      color: #333;
+      padding: 20px;
+    }
+    .card-wrap {
+      width: 100%;
+      max-width: 460px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 40px 32px;
+      text-align: center;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.06);
+      position: relative;
+      overflow: hidden;
+      animation: fadeIn 0.4s ease-out;
+    }
+    .card-wrap::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: <%= typeof success !== 'undefined' && !success ? '#ef4444' : 'linear-gradient(90deg, #048eff, #065492)' %>;
+    }
+    .brand-logo {
+      max-height: 55px;
+      margin-bottom: 24px;
+      object-fit: contain;
+    }
+    .icon-wrapper {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: <%= typeof success !== 'undefined' && !success ? '#fee2e2' : '#e0f2fe' %>;
+      animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .icon-wrapper svg {
+      width: 44px;
+      height: 44px;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke: <%= typeof success !== 'undefined' && !success ? '#ef4444' : '#048eff' %>;
+    }
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 12px;
+    }
+    p.description {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #4b5563;
+      margin-bottom: 28px;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #048eff 0%, #065492 100%);
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(4, 142, 255, 0.35);
+      transition: all 0.2s ease;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(4, 142, 255, 0.45);
+      color: #ffffff;
+    }
+    .btn-secondary {
+      display: inline-block;
+      margin-top: 14px;
+      font-size: 13px;
+      color: #6b7280;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .btn-secondary:hover {
+      color: #048eff;
+      text-decoration: underline;
+    }
+    .countdown-text {
+      margin-top: 18px;
+      font-size: 12px;
+      color: #9ca3af;
+      font-weight: 500;
+    }
+    .countdown-number {
+      font-weight: 700;
+      color: #048eff;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.6); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card-wrap">
+    <img src="/mainLogo.png" alt="SecurPoint" class="brand-logo" onerror="this.src='/fav_icon.svg'">
+
+    <% 
+      var finalLoginUrl = (typeof loginUrl !== 'undefined' && loginUrl ? loginUrl : 'https://securpoint.app/admin/login').replace(/\/home(?=\/admin\/login)/gi, '');
+    %>
+    <% if (typeof success !== 'undefined' && !success) { %>
+      <div class="icon-wrapper">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+      </div>
+      <h2>Reset Failed</h2>
+      <p class="description"><%= typeof message !== 'undefined' ? message : 'Something went wrong while resetting your password.' %></p>
+      <a href="<%= finalLoginUrl %>" class="btn-primary">
+        Return to Login
+      </a>
+    <% } else { %>
+      <div class="icon-wrapper">
+        <svg viewBox="0 0 24 24">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      </div>
+      <h2>Congratulations!</h2>
+      <p class="description">
+        <%= typeof message !== 'undefined' ? message : 'Your account password has been set successfully.' %><br>
+        You can now sign in with your new password.
+      </p>
+
+      <a id="loginBtn" href="<%= finalLoginUrl %>" class="btn-primary">
+        Proceed to Login &rarr;
+      </a>
+
+      <div class="countdown-text">
+        Redirecting you to login in <span class="countdown-number" id="countdown">5</span> seconds...
+      </div>
+
+      <div>
+        <a href="<%= typeof dashboardUrl !== 'undefined' ? dashboardUrl.replace(/\/home\/?$/i, '') : 'https://securpoint.app' %>" class="btn-secondary">
+          Go to SecurPoint Homepage
+        </a>
+      </div>
+
+      <script>
+        (function() {
+          var seconds = 5;
+          var countdownEl = document.getElementById('countdown');
+          var targetUrl = "<%= finalLoginUrl %>";
+          
+          var interval = setInterval(function() {
+            seconds--;
+            if (countdownEl) countdownEl.textContent = seconds;
+            if (seconds <= 0) {
+              clearInterval(interval);
+              window.location.href = targetUrl;
+            }
+          }, 1000);
+        })();
+      </script>
+    <% } %>
+  </div>
+</body>
+</html>

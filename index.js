@@ -195,14 +195,31 @@ app.use("/adminNotifications", adminNotificationRouter);
 
 app.get("/reset-password", async (req, res) => {
   const token = req.query.token;
+  const dashboardUrl = (process.env.DASHBOARD_URL || process.env.FRONTEND_URL || "https://securpoint.app").replace(/\/home\/?$/i, "").replace(/\/$/, "");
+  const loginUrl = (process.env.ADMIN_LOGIN_URL || "https://securpoint.app/admin/login").replace(/\/home(?=\/admin\/login)/i, "");
+
   if (!token) {
-    return res.status(400).send("Token is required");
+    return res.status(400).render("resetSuccess.ejs", {
+      success: false,
+      message: "Password reset token is missing.",
+      dashboardUrl,
+      loginUrl,
+    });
   }
   const admin = await prisma.admin.findFirst({ where: { token } });
   if (!admin) {
-    return res.status(400).send("Invalid or expired reset token");
+    return res.status(400).render("resetSuccess.ejs", {
+      success: false,
+      message: "This password reset token is invalid or has expired. Please request a new password reset link.",
+      dashboardUrl,
+      loginUrl,
+    });
   }
-  return res.render("forgetPassword.ejs", { token, baseUrl: process.env.BASE_URL || "https://securpoint.app:4000" });
+  return res.render("forgetPassword.ejs", {
+    token,
+    baseUrl: process.env.BASE_URL || "https://securpoint.app",
+    loginUrl
+  });
 });
 
 app.get("/test", (req, res) => {

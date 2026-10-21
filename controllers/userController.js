@@ -517,10 +517,10 @@ export async function login(req, res) {
         } else {
 
             if (email) {
-
-                const user = await prisma.user.findUnique({
+                const normalizedEmail = (result.value.email || email).trim().toLowerCase();
+                const user = await prisma.user.findFirst({
                     where: {
-                        email: email
+                        email: { equals: normalizedEmail }
                     }
                 })
                 console.log("user =>", user);
@@ -1121,10 +1121,21 @@ export async function resetPassword(req, res, next) {
                     success: false,
                 });
             }
+            const normalizedEmail = (result.value.email || email).trim().toLowerCase();
+            const existingUser = await prisma.user.findFirst({
+                where: { email: { equals: normalizedEmail } }
+            });
+            if (!existingUser) {
+                return res.status(404).json({
+                    message: "User not found",
+                    status: 404,
+                    success: false
+                });
+            }
             const hashedPassword = await bcrypt.hash(password, 10);
             const user = await prisma.user.update({
                 where: {
-                    email: email
+                    id: existingUser.id
                 },
                 data: {
                     password: hashedPassword
@@ -4909,23 +4920,65 @@ export async function emailPhoneUpdate(req, res) {
 
 export const getLabels = async (req, res) => {
     try {
-
-        const data = await prisma.label.findMany({
+        let data = await prisma.label.findMany({
+            orderBy: { id: 'asc' }
         });
+
+        const defaultLabels = [
+            {
+                type: 'MONITOR',
+                content: 'Monitor security status, receive real-time alerts, and track asset activity across all registered devices.'
+            },
+            {
+                type: 'LOCK',
+                content: 'Lock asset to prevent unauthorized transfers, modifications, or access until unlocked by the verified owner.'
+            },
+            {
+                type: 'PROMOTE',
+                content: 'Promote your asset to enhance visibility in public searches, community listings, and partner networks.'
+            },
+            {
+                type: 'ASSET',
+                content: 'Asset protection, ownership verification, and digital certificate management.'
+            }
+        ];
+
+        const existingTypes = new Set(data.map(item => item.type));
+        let missingFound = false;
+
+        for (const def of defaultLabels) {
+            if (!existingTypes.has(def.type)) {
+                await prisma.label.upsert({
+                    where: { type: def.type },
+                    update: {},
+                    create: {
+                        type: def.type,
+                        content: def.content
+                    }
+                });
+                missingFound = true;
+            }
+        }
+
+        if (missingFound) {
+            data = await prisma.label.findMany({
+                orderBy: { id: 'asc' }
+            });
+        }
 
         res.status(200).json({
             success: true,
             status: 200,
-            message: 'Lables',
+            message: 'Labels',
             data
         });
     } catch (error) {
         console.log(error);
         res.status(500).json({
             success: false,
-            status: error,
+            status: 500,
             message: 'Internal Server Error',
-            error: error
+            error: error.message || error
         });
     }
 }

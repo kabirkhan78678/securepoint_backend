@@ -100,3 +100,4 @@ userRouter.get('/getAllSubCategories', getAllSubCategory);
 userRouter.post('/emailPhoneUpdate', auth, emailPhoneUpdate);
 
 userRouter.get("/getLables", auth, getLabels);
+userRouter.get("/getLabels", auth, getLabels);

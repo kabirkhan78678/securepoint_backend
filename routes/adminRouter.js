@@ -11,6 +11,7 @@ import {login, passwordChange, getAllUsers, addCategory, addSubCategory, getAllC
     updatecms,
     getLabels,
     updateLabel,
+    createLabel,
     createAdmin,
     getAdmins,
     deleteAdmin,
@@ -103,7 +104,12 @@ adminRouter.post('/forgotPassword', forgotPassword );
 
 adminRouter.get('/verifyPassword/:token', verifyPassword);
 
-adminRouter.post('/resetPassword',changePassword );
+adminRouter.post('/resetPassword', changePassword );
+
+adminRouter.get('/resetPassword', (req, res) => {
+  const loginUrl = (process.env.ADMIN_LOGIN_URL || "https://securpoint.app/admin/login").replace(/\/home(?=\/admin\/login)/i, "");
+  return res.redirect(loginUrl);
+});
 
 
 adminRouter.get('/faq',adminAuth(["SUBADMIN", "ADMIN"]), getFAQs);
@@ -140,9 +146,14 @@ adminRouter.post("/getCms", getcms);
 
 adminRouter.post('/updateCms',adminAuth(["SUBADMIN", "ADMIN"]), updatecms);
 
-adminRouter.get("/getLables", adminAuth(["SUBADMIN", "ADMIN"]),  getLabels);
+adminRouter.get("/getLables", adminAuth(["SUBADMIN", "ADMIN"]), getLabels);
+adminRouter.get("/getLabels", adminAuth(["SUBADMIN", "ADMIN"]), getLabels);
 
-adminRouter.post('/updateLables',adminAuth(["SUBADMIN", "ADMIN"]), updateLabel);
+adminRouter.post('/updateLables', adminAuth(["SUBADMIN", "ADMIN"]), updateLabel);
+adminRouter.post('/updateLabels', adminAuth(["SUBADMIN", "ADMIN"]), updateLabel);
+
+adminRouter.post('/createLabel', adminAuth(["SUBADMIN", "ADMIN"]), createLabel);
+adminRouter.post('/createLables', adminAuth(["SUBADMIN", "ADMIN"]), createLabel);
 
 adminRouter.get("/getFeatures", adminAuth(["SUBADMIN", "ADMIN"]),  getFeatures)
 
