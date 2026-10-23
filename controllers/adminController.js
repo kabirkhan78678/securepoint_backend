@@ -636,9 +636,16 @@ export async function getAllCategory(req, res) {
         SubcategoryName: subName,
         SubCategoryName: subName,
         subCategoryName: subName,
-        subCategory: subName,
         SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
-        subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+        subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+        totalViews: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+        total_views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+        views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+        publicLinksClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+        public_links_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+        publicLinkClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+        public_link_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+        clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0)
       };
     });
 

@@ -1403,7 +1403,15 @@ export async function getCategories(req, res) {
                 subCategoryName: subName,
                 subCategory: subName,
                 SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
-                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                totalViews: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                total_views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                publicLinksClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_links_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                publicLinkClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_link_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0)
             };
         });
 
@@ -1688,9 +1696,7 @@ export async function getMySingleAsset(req, res) {
             },
             include: {
                 AssetImages: true,
-                user: true,
-                category: true,
-                subCategory: true
+                user: true
             }
         });
 
@@ -1701,6 +1707,27 @@ export async function getMySingleAsset(req, res) {
                 success: false
             });
         }
+
+        let category = null;
+        if (asset.categoryId) {
+            try {
+                category = await prisma.category.findFirst({
+                    where: { id: asset.categoryId }
+                });
+            } catch (_) {}
+        }
+
+        let subCategory = null;
+        if (asset.subCategoryId) {
+            try {
+                subCategory = await prisma.subCategory.findFirst({
+                    where: { id: asset.subCategoryId }
+                });
+            } catch (_) {}
+        }
+
+        asset.category = category;
+        asset.subCategory = subCategory;
 
         const assetCount = await prisma.asset.count({
             where: {
@@ -1731,10 +1758,37 @@ export async function getMySingleAsset(req, res) {
             delete asset.user.password;
         }
 
+        const totalViews = Number(asset.totalViews ?? asset.total_views ?? asset.views ?? 0);
+        const publicLinksClicks = Number(asset.publicLinksClicks ?? asset.public_links_clicks ?? asset.publicLinkClicks ?? asset.public_link_clicks ?? asset.clicks ?? 0);
+        const publicLinkClicks = publicLinksClicks;
+
+        if (asset.category) {
+            asset.category.totalViews = totalViews;
+            asset.category.total_views = totalViews;
+            asset.category.views = totalViews;
+            asset.category.publicLinksClicks = publicLinksClicks;
+            asset.category.public_links_clicks = publicLinksClicks;
+            asset.category.publicLinkClicks = publicLinksClicks;
+            asset.category.public_link_clicks = publicLinksClicks;
+            asset.category.clicks = publicLinksClicks;
+            if (asset.subCategory) {
+                asset.category.SubcategoryName = asset.subCategory.subCategory;
+                asset.category.subCategoryName = asset.subCategory.subCategory;
+            }
+        }
+
         return res.status(200).json({
             status: 200,
             message: 'Asset Fetched Successfully',
             success: true,
+            totalViews,
+            total_views: totalViews,
+            views: totalViews,
+            publicLinksClicks,
+            public_links_clicks: publicLinksClicks,
+            publicLinkClicks: publicLinksClicks,
+            public_link_clicks: publicLinksClicks,
+            clicks: publicLinksClicks,
             assetCount,
             joinedDate,
             joined: joinedDate,
@@ -1742,6 +1796,14 @@ export async function getMySingleAsset(req, res) {
             isMissing: isMissing,
             asset: {
                 ...asset,
+                totalViews,
+                total_views: totalViews,
+                views: totalViews,
+                publicLinksClicks,
+                public_links_clicks: publicLinksClicks,
+                publicLinkClicks: publicLinksClicks,
+                public_link_clicks: publicLinksClicks,
+                clicks: publicLinksClicks,
                 assetCount,
                 joinedDate,
                 joined: joinedDate,
@@ -2620,6 +2682,21 @@ export async function homePage(req, res) {
             });
         }
 
+        let categoryMetricsMap = new Map();
+        try {
+            const rawCatMetrics = await prisma.$queryRawUnsafe(
+                "SELECT id, totalViews, publicLinksClicks FROM Category"
+            );
+            if (rawCatMetrics && Array.isArray(rawCatMetrics)) {
+                for (const cm of rawCatMetrics) {
+                    categoryMetricsMap.set(cm.id, {
+                        totalViews: Number(cm.totalViews || 0),
+                        publicLinksClicks: Number(cm.publicLinksClicks || 0)
+                    });
+                }
+            }
+        } catch (_) {}
+
         await Promise.all(categories.map(async (category) => {
             if (category.categoryImage) {
                 category.categoryImage = `${baseurl}/images/${category.categoryImage}`;
@@ -2646,6 +2723,20 @@ export async function homePage(req, res) {
             category.subCategory = category.SubcategoryName;
             category.SubcategoryNames = catSubs.map(s => s.subCategory).filter(Boolean);
             category.subCategoryNames = category.SubcategoryNames;
+
+            const catMetrics = categoryMetricsMap.get(category.id) || { totalViews: 0, publicLinksClicks: 0 };
+            const totalViews = Number(category.totalViews ?? category.total_views ?? category.views ?? catMetrics.totalViews);
+            const publicLinksClicks = Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? catMetrics.publicLinksClicks);
+
+            category.totalViews = totalViews;
+            category.total_views = totalViews;
+            category.views = totalViews;
+
+            category.publicLinksClicks = publicLinksClicks;
+            category.public_links_clicks = publicLinksClicks;
+            category.publicLinkClicks = publicLinksClicks;
+            category.public_link_clicks = publicLinksClicks;
+            category.clicks = publicLinksClicks;
         }));
 
         const filterQuery = {
@@ -2687,6 +2778,20 @@ export async function homePage(req, res) {
             if (asset.user.avatar_url) {
                 asset.user.avatar_url = `${baseurl}/images/${asset.user.avatar_url}`
             }
+
+            const assetViews = Number(asset.totalViews ?? asset.total_views ?? asset.views ?? 0);
+            const assetClicks = Number(asset.publicLinksClicks ?? asset.public_links_clicks ?? asset.publicLinkClicks ?? asset.public_link_clicks ?? asset.clicks ?? 0);
+
+            asset.totalViews = assetViews;
+            asset.total_views = assetViews;
+            asset.views = assetViews;
+
+            asset.publicLinksClicks = assetClicks;
+            asset.public_links_clicks = assetClicks;
+            asset.publicLinkClicks = assetClicks;
+            asset.public_link_clicks = assetClicks;
+            asset.clicks = assetClicks;
+
             return asset
         }))
 
@@ -2694,9 +2799,14 @@ export async function homePage(req, res) {
             status: 200,
             message: 'Home Page Fetche',
             success: true,
+            totalViews: 0,
+            total_views: 0,
+            publicLinksClicks: 0,
+            public_links_clicks: 0,
+            publicLinkClicks: 0,
+            public_link_clicks: 0,
             categories,
             assets
-
         })
 
     } catch (error) {
@@ -2922,7 +3032,15 @@ export async function publicHomePage(req, res) {
                 subCategoryName: subName,
                 subCategory: subName,
                 SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
-                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                totalViews: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                total_views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                publicLinksClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_links_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                publicLinkClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_link_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0)
             };
         });
 
@@ -3199,6 +3317,50 @@ export async function publicAssetDetails(req, res) {
             });
         }
 
+        // Direct MySQL tracking (without touching Prisma schema)
+        let realViews = 1;
+        let realClicks = 1;
+        try {
+            await prisma.$executeRawUnsafe(
+                "UPDATE Asset SET totalViews = COALESCE(totalViews, 0) + 1, publicLinksClicks = COALESCE(publicLinksClicks, 0) + 1 WHERE id = ?",
+                parsedId
+            );
+            if (asset.categoryId) {
+                await prisma.$executeRawUnsafe(
+                    "UPDATE Category SET totalViews = COALESCE(totalViews, 0) + 1, publicLinksClicks = COALESCE(publicLinksClicks, 0) + 1 WHERE id = ?",
+                    asset.categoryId
+                );
+            }
+        } catch (sqlErr) {
+            try {
+                await prisma.$executeRawUnsafe("ALTER TABLE Asset ADD COLUMN IF NOT EXISTS `totalViews` INT NOT NULL DEFAULT 0");
+                await prisma.$executeRawUnsafe("ALTER TABLE Asset ADD COLUMN IF NOT EXISTS `publicLinksClicks` INT NOT NULL DEFAULT 0");
+                await prisma.$executeRawUnsafe("ALTER TABLE Category ADD COLUMN IF NOT EXISTS `totalViews` INT NOT NULL DEFAULT 0");
+                await prisma.$executeRawUnsafe("ALTER TABLE Category ADD COLUMN IF NOT EXISTS `publicLinksClicks` INT NOT NULL DEFAULT 0");
+                await prisma.$executeRawUnsafe(
+                    "UPDATE Asset SET totalViews = totalViews + 1, publicLinksClicks = publicLinksClicks + 1 WHERE id = ?",
+                    parsedId
+                );
+                if (asset.categoryId) {
+                    await prisma.$executeRawUnsafe(
+                        "UPDATE Category SET totalViews = totalViews + 1, publicLinksClicks = publicLinksClicks + 1 WHERE id = ?",
+                        asset.categoryId
+                    );
+                }
+            } catch (_) {}
+        }
+
+        try {
+            const rawAsset = await prisma.$queryRawUnsafe(
+                "SELECT totalViews, publicLinksClicks FROM Asset WHERE id = ? LIMIT 1",
+                parsedId
+            );
+            if (rawAsset && rawAsset.length > 0) {
+                realViews = Number(rawAsset[0].totalViews ?? 1);
+                realClicks = Number(rawAsset[0].publicLinksClicks ?? 1);
+            }
+        } catch (_) {}
+
         // CATEGORY FETCH SAFE
         let category = null;
 
@@ -3349,6 +3511,28 @@ export async function publicAssetDetails(req, res) {
 
             const isMissing = item.status ? item.status.trim().toLowerCase() === 'missing' : false;
 
+            const totalViews = Number(item.totalViews ?? item.total_views ?? item.views ?? 0);
+            const publicLinksClicks = Number(item.publicLinksClicks ?? item.public_links_clicks ?? item.publicLinkClicks ?? item.public_link_clicks ?? item.clicks ?? 0);
+
+            if (itemCategory) {
+                const catViews = Number(itemCategory.totalViews ?? itemCategory.total_views ?? itemCategory.views ?? totalViews);
+                const catClicks = Number(itemCategory.publicLinksClicks ?? itemCategory.public_links_clicks ?? itemCategory.publicLinkClicks ?? itemCategory.public_link_clicks ?? publicLinksClicks);
+                itemCategory = {
+                    ...itemCategory,
+                    categoryImage: itemCategory.categoryImage ? `${baseurl}/images/${itemCategory.categoryImage}` : null,
+                    SubcategoryName: itemSubCategory ? itemSubCategory.subCategory : null,
+                    subCategoryName: itemSubCategory ? itemSubCategory.subCategory : null,
+                    totalViews: catViews,
+                    total_views: catViews,
+                    views: catViews,
+                    publicLinksClicks: catClicks,
+                    public_links_clicks: catClicks,
+                    publicLinkClicks: catClicks,
+                    public_link_clicks: catClicks,
+                    clicks: catClicks
+                };
+            }
+
             return {
 
                 ...item,
@@ -3363,16 +3547,25 @@ export async function publicAssetDetails(req, res) {
 
                 isMissing: isMissing,
 
+                totalViews,
+                total_views: totalViews,
+                views: totalViews,
+                publicLinksClicks,
+                public_links_clicks: publicLinksClicks,
+                publicLinkClicks: publicLinksClicks,
+                public_link_clicks: publicLinksClicks,
+                clicks: publicLinksClicks,
+
                 category: itemCategory || null,
 
                 subCategory: itemSubCategory || null,
 
-                AssetImages: item.AssetImages.map((img) => ({
+                AssetImages: item.AssetImages ? item.AssetImages.map((img) => ({
                     ...img,
                     image_url: img.image_url
                         ? `${baseurl}/images/${img.image_url}`
                         : null
-                })),
+                })) : [],
 
                 user: item.user
                     ? {
@@ -3402,6 +3595,9 @@ export async function publicAssetDetails(req, res) {
 
         const formattedMainAsset = await formatAsset({
             ...asset,
+            totalViews: realViews,
+            publicLinksClicks: realClicks,
+            publicLinkClicks: realClicks,
             assetCount,
             joinedDate,
             joined: joinedDate,
@@ -3416,6 +3612,14 @@ export async function publicAssetDetails(req, res) {
             status: 200,
             success: true,
             message: "Public asset details fetched successfully",
+            totalViews: formattedMainAsset.totalViews,
+            total_views: formattedMainAsset.total_views,
+            views: formattedMainAsset.views,
+            publicLinksClicks: formattedMainAsset.publicLinksClicks,
+            public_links_clicks: formattedMainAsset.public_links_clicks,
+            publicLinkClicks: formattedMainAsset.publicLinkClicks,
+            public_link_clicks: formattedMainAsset.public_link_clicks,
+            clicks: formattedMainAsset.clicks,
             assetCount,
             joinedDate,
             joined: joinedDate,
@@ -3459,9 +3663,7 @@ export async function getSingleAsset(req, res) {
             },
             include: {
                 AssetImages: true,
-                user: true,
-                category: true,
-                subCategory: true
+                user: true
             }
         });
 
@@ -3472,6 +3674,27 @@ export async function getSingleAsset(req, res) {
                 success: false
             });
         }
+
+        let category = null;
+        if (asset.categoryId) {
+            try {
+                category = await prisma.category.findFirst({
+                    where: { id: asset.categoryId }
+                });
+            } catch (_) {}
+        }
+
+        let subCategory = null;
+        if (asset.subCategoryId) {
+            try {
+                subCategory = await prisma.subCategory.findFirst({
+                    where: { id: asset.subCategoryId }
+                });
+            } catch (_) {}
+        }
+
+        asset.category = category;
+        asset.subCategory = subCategory;
 
         const checkSaved = await prisma.saveAsset.findFirst({
             where: {
@@ -3511,10 +3734,37 @@ export async function getSingleAsset(req, res) {
             delete asset.user.password;
         }
 
+        const totalViews = Number(asset.totalViews ?? asset.total_views ?? asset.views ?? 0);
+        const publicLinksClicks = Number(asset.publicLinksClicks ?? asset.public_links_clicks ?? asset.publicLinkClicks ?? asset.public_link_clicks ?? asset.clicks ?? 0);
+        const publicLinkClicks = publicLinksClicks;
+
+        if (asset.category) {
+            asset.category.totalViews = totalViews;
+            asset.category.total_views = totalViews;
+            asset.category.views = totalViews;
+            asset.category.publicLinksClicks = publicLinksClicks;
+            asset.category.public_links_clicks = publicLinksClicks;
+            asset.category.publicLinkClicks = publicLinksClicks;
+            asset.category.public_link_clicks = publicLinksClicks;
+            asset.category.clicks = publicLinksClicks;
+            if (asset.subCategory) {
+                asset.category.SubcategoryName = asset.subCategory.subCategory;
+                asset.category.subCategoryName = asset.subCategory.subCategory;
+            }
+        }
+
         return res.status(200).json({
             status: 200,
             message: 'Asset Fetched Successfully',
             success: true,
+            totalViews,
+            total_views: totalViews,
+            views: totalViews,
+            publicLinksClicks,
+            public_links_clicks: publicLinksClicks,
+            publicLinkClicks: publicLinksClicks,
+            public_link_clicks: publicLinksClicks,
+            clicks: publicLinksClicks,
             assetCount,
             joinedDate,
             joined: joinedDate,
@@ -3522,6 +3772,14 @@ export async function getSingleAsset(req, res) {
             isMissing: isMissing,
             asset: {
                 ...asset,
+                totalViews,
+                total_views: totalViews,
+                views: totalViews,
+                publicLinksClicks,
+                public_links_clicks: publicLinksClicks,
+                publicLinkClicks: publicLinksClicks,
+                public_link_clicks: publicLinksClicks,
+                clicks: publicLinksClicks,
                 assetCount,
                 joinedDate,
                 joined: joinedDate,
@@ -4369,8 +4627,6 @@ export async function markAssetAsMissing(req, res) {
             where: { id: assetId },
             include: {
                 AssetImages: true,
-                category: true,
-                subCategory: true,
                 user: true
             }
         });
@@ -4399,11 +4655,30 @@ export async function markAssetAsMissing(req, res) {
             },
             include: {
                 AssetImages: true,
-                category: true,
-                subCategory: true,
                 user: true
             }
         });
+
+        let assetCategory = null;
+        if (updatedAsset.categoryId) {
+            try {
+                assetCategory = await prisma.category.findFirst({
+                    where: { id: updatedAsset.categoryId }
+                });
+            } catch (_) {}
+        }
+
+        let assetSubCategory = null;
+        if (updatedAsset.subCategoryId) {
+            try {
+                assetSubCategory = await prisma.subCategory.findFirst({
+                    where: { id: updatedAsset.subCategoryId }
+                });
+            } catch (_) {}
+        }
+
+        updatedAsset.category = assetCategory;
+        updatedAsset.subCategory = assetSubCategory;
 
         // Format image URLs
         if (updatedAsset.AssetImages && updatedAsset.AssetImages.length > 0) {
@@ -4897,7 +5172,15 @@ export async function getAllCategory(req, res) {
                 subCategoryName: subName,
                 subCategory: subName,
                 SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
-                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                totalViews: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                total_views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                views: Number(category.totalViews ?? category.total_views ?? category.views ?? 0),
+                publicLinksClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_links_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                publicLinkClicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                public_link_clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0),
+                clicks: Number(category.publicLinksClicks ?? category.public_links_clicks ?? category.publicLinkClicks ?? category.public_link_clicks ?? category.clicks ?? 0)
             };
         });
 
