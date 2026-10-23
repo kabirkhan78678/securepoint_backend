@@ -585,29 +585,62 @@ export async function getAllAssets(req, res) {
 
 export async function getAllCategory(req, res) {
   try {
-    const { search } = req.query
-    const categoryList = await prisma.category.findMany({
-      where: {
-        categoryName: {
-          contains: search
-        }
-      },
-      orderBy: [
-        {
-          display_order: 'asc'
+    const [categoryList, allSubCategories] = await Promise.all([
+      prisma.category.findMany({
+        where: {
+          categoryName: {
+            contains: search
+          }
         },
-        {
-          id: 'asc'
-        }
-      ]
+        orderBy: [
+          {
+            display_order: 'asc'
+          },
+          {
+            id: 'asc'
+          }
+        ]
+      }),
+      prisma.subCategory.findMany({
+        orderBy: { id: 'asc' }
+      })
+    ]);
+
+    const subCategoryMap = new Map();
+    for (const sub of allSubCategories) {
+      if (!subCategoryMap.has(sub.categoryId)) {
+        subCategoryMap.set(sub.categoryId, []);
+      }
+      subCategoryMap.get(sub.categoryId).push({
+        id: sub.id,
+        subCategory: sub.subCategory,
+        subCategoryName: sub.subCategory,
+        SubcategoryName: sub.subCategory,
+        SubCategoryName: sub.subCategory,
+        categoryId: sub.categoryId
+      });
+    }
+
+    const formattedCategories = categoryList.map((category) => {
+      const catSubs = subCategoryMap.get(category.id) || [];
+      const subName = catSubs.length > 0
+        ? catSubs.map(s => s.subCategory).filter(Boolean).join(', ')
+        : null;
+      return {
+        ...category,
+        categoryImage: category.categoryImage
+          ? `${baseurl}/images/${category.categoryImage}`
+          : null,
+        SubCategory: catSubs,
+        subCategories: catSubs,
+        SubcategoryName: subName,
+        SubCategoryName: subName,
+        subCategoryName: subName,
+        subCategory: subName,
+        SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+        subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+      };
     });
-    console.log(categoryList);
-    const formattedCategories = categoryList.map((category) => ({
-      ...category,
-      categoryImage: category.categoryImage
-        ? `${baseurl}/images/${category.categoryImage}`
-        : null,
-    }));
 
     return res.json({
       status: 200,

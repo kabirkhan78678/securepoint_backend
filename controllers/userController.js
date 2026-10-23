@@ -1342,7 +1342,7 @@ export async function editProfile(req, res) {
 export async function getCategories(req, res) {
     try {
         const reportedAssetIds = await getReportedAssetIds(req.user.id);
-        const [categories, categoryCounts] = await Promise.all([
+        const [categories, categoryCounts, allSubCategories] = await Promise.all([
             prisma.category.findMany({
                 orderBy: [
                     { display_order: 'asc' },
@@ -1362,6 +1362,9 @@ export async function getCategories(req, res) {
                 _count: {
                     _all: true
                 }
+            }),
+            prisma.subCategory.findMany({
+                orderBy: { id: 'asc' }
             })
         ]);
 
@@ -1369,11 +1372,40 @@ export async function getCategories(req, res) {
             categoryCounts.map((item) => [item.categoryId, item._count._all])
         );
 
-        const formattedCategories = categories.map((category) => ({
-            ...category,
-            categoryImage: category.categoryImage ? `${baseurl}/images/${category.categoryImage}` : null,
-            count: categoryCountMap.get(category.id) || 0
-        }));
+        const subCategoryMap = new Map();
+        for (const sub of allSubCategories) {
+            if (!subCategoryMap.has(sub.categoryId)) {
+                subCategoryMap.set(sub.categoryId, []);
+            }
+            subCategoryMap.get(sub.categoryId).push({
+                id: sub.id,
+                subCategory: sub.subCategory,
+                subCategoryName: sub.subCategory,
+                SubcategoryName: sub.subCategory,
+                SubCategoryName: sub.subCategory,
+                categoryId: sub.categoryId
+            });
+        }
+
+        const formattedCategories = categories.map((category) => {
+            const catSubs = subCategoryMap.get(category.id) || [];
+            const subName = catSubs.length > 0
+                ? catSubs.map(s => s.subCategory).filter(Boolean).join(', ')
+                : null;
+            return {
+                ...category,
+                categoryImage: category.categoryImage ? `${baseurl}/images/${category.categoryImage}` : null,
+                count: categoryCountMap.get(category.id) || 0,
+                SubCategory: catSubs,
+                subCategories: catSubs,
+                SubcategoryName: subName,
+                SubCategoryName: subName,
+                subCategoryName: subName,
+                subCategory: subName,
+                SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+            };
+        });
 
         return res.status(200).json({
             status: 200,
@@ -2559,18 +2591,38 @@ export async function deleteAssetImage(req, res) {
 // }
 export async function homePage(req, res) {
     try {
-        const { search } = req.query
-        const categories = await prisma.category.findMany({
-            orderBy: [
-                { display_order: 'asc' },
-                { id: 'asc' }
-            ]
-        });
+        const { search } = req.query;
+        const [categories, allSubCategories] = await Promise.all([
+            prisma.category.findMany({
+                orderBy: [
+                    { display_order: 'asc' },
+                    { id: 'asc' }
+                ]
+            }),
+            prisma.subCategory.findMany({
+                orderBy: { id: 'asc' }
+            })
+        ]);
         const reportedAssetIds = await getReportedAssetIds(req.user.id);
+
+        const subCategoryMap = new Map();
+        for (const sub of allSubCategories) {
+            if (!subCategoryMap.has(sub.categoryId)) {
+                subCategoryMap.set(sub.categoryId, []);
+            }
+            subCategoryMap.get(sub.categoryId).push({
+                id: sub.id,
+                subCategory: sub.subCategory,
+                subCategoryName: sub.subCategory,
+                SubcategoryName: sub.subCategory,
+                SubCategoryName: sub.subCategory,
+                categoryId: sub.categoryId
+            });
+        }
 
         await Promise.all(categories.map(async (category) => {
             if (category.categoryImage) {
-                category.categoryImage = `${baseurl}/images/${category.categoryImage}`
+                category.categoryImage = `${baseurl}/images/${category.categoryImage}`;
             }
             const categoryFilterQuery = {
                 ...(reportedAssetIds.length > 0 && { id: { notIn: reportedAssetIds } }),
@@ -2581,8 +2633,20 @@ export async function homePage(req, res) {
             };
             category.count = await prisma.asset.count({
                 where: categoryFilterQuery
-            })
-        }))
+            });
+
+            const catSubs = subCategoryMap.get(category.id) || [];
+            category.SubCategory = catSubs;
+            category.subCategories = catSubs;
+            category.SubcategoryName = catSubs.length > 0
+                ? catSubs.map(s => s.subCategory).filter(Boolean).join(', ')
+                : null;
+            category.subCategoryName = category.SubcategoryName;
+            category.SubCategoryName = category.SubcategoryName;
+            category.subCategory = category.SubcategoryName;
+            category.SubcategoryNames = catSubs.map(s => s.subCategory).filter(Boolean);
+            category.subCategoryNames = category.SubcategoryNames;
+        }));
 
         const filterQuery = {
             userId: {
@@ -2678,12 +2742,17 @@ export async function publicHomePage(req, res) {
         });
         const blockedUserIds = blockedUsers.map((user) => user.id);
 
-        const categories = await prisma.category.findMany({
-            orderBy: [
-                { display_order: 'asc' },
-                { id: 'asc' }
-            ]
-        });
+        const [categories, allPublicSubCategories] = await Promise.all([
+            prisma.category.findMany({
+                orderBy: [
+                    { display_order: 'asc' },
+                    { id: 'asc' }
+                ]
+            }),
+            prisma.subCategory.findMany({
+                orderBy: { id: 'asc' }
+            })
+        ]);
 
         const validCategoryIds = categories.map((category) => category.id);
 
@@ -2822,11 +2891,40 @@ export async function publicHomePage(req, res) {
 
         const categoryCountMap = new Map(categoryCounts.map((item) => [item.categoryId, item._count._all]));
 
-        const formattedCategories = categories.map((category) => ({
-            ...category,
-            categoryImage: category.categoryImage ? `${baseurl}/images/${category.categoryImage}` : null,
-            count: categoryCountMap.get(category.id) || 0
-        }));
+        const subCategoryMap = new Map();
+        for (const sub of allPublicSubCategories) {
+            if (!subCategoryMap.has(sub.categoryId)) {
+                subCategoryMap.set(sub.categoryId, []);
+            }
+            subCategoryMap.get(sub.categoryId).push({
+                id: sub.id,
+                subCategory: sub.subCategory,
+                subCategoryName: sub.subCategory,
+                SubcategoryName: sub.subCategory,
+                SubCategoryName: sub.subCategory,
+                categoryId: sub.categoryId
+            });
+        }
+
+        const formattedCategories = categories.map((category) => {
+            const catSubs = subCategoryMap.get(category.id) || [];
+            const subName = catSubs.length > 0
+                ? catSubs.map(s => s.subCategory).filter(Boolean).join(', ')
+                : null;
+            return {
+                ...category,
+                categoryImage: category.categoryImage ? `${baseurl}/images/${category.categoryImage}` : null,
+                count: categoryCountMap.get(category.id) || 0,
+                SubCategory: catSubs,
+                subCategories: catSubs,
+                SubcategoryName: subName,
+                SubCategoryName: subName,
+                subCategoryName: subName,
+                subCategory: subName,
+                SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+            };
+        });
 
         const formatAssetData = (assetData) => {
             if (assetData.AssetImages) {
@@ -4755,19 +4853,53 @@ export async function privacyPolicy(req, res) {
 
 export async function getAllCategory(req, res) {
     try {
-        const categoryList = await prisma.category.findMany({
-            orderBy: [
-                { display_order: 'asc' },
-                { id: 'asc' }
-            ]
+        const [categoryList, allSubCategories] = await Promise.all([
+            prisma.category.findMany({
+                orderBy: [
+                    { display_order: 'asc' },
+                    { id: 'asc' }
+                ]
+            }),
+            prisma.subCategory.findMany({
+                orderBy: { id: 'asc' }
+            })
+        ]);
+
+        const subCategoryMap = new Map();
+        for (const sub of allSubCategories) {
+            if (!subCategoryMap.has(sub.categoryId)) {
+                subCategoryMap.set(sub.categoryId, []);
+            }
+            subCategoryMap.get(sub.categoryId).push({
+                id: sub.id,
+                subCategory: sub.subCategory,
+                subCategoryName: sub.subCategory,
+                SubcategoryName: sub.subCategory,
+                SubCategoryName: sub.subCategory,
+                categoryId: sub.categoryId
+            });
+        }
+
+        const formattedCategories = categoryList.map((category) => {
+            const catSubs = subCategoryMap.get(category.id) || [];
+            const subName = catSubs.length > 0
+                ? catSubs.map(s => s.subCategory).filter(Boolean).join(', ')
+                : null;
+            return {
+                ...category,
+                categoryImage: category.categoryImage
+                    ? `${baseurl}/images/${category.categoryImage}`
+                    : null,
+                SubCategory: catSubs,
+                subCategories: catSubs,
+                SubcategoryName: subName,
+                SubCategoryName: subName,
+                subCategoryName: subName,
+                subCategory: subName,
+                SubcategoryNames: catSubs.map(s => s.subCategory).filter(Boolean),
+                subCategoryNames: catSubs.map(s => s.subCategory).filter(Boolean)
+            };
         });
-        console.log(categoryList);
-        const formattedCategories = categoryList.map((category) => ({
-            ...category,
-            categoryImage: category.categoryImage
-                ? `${baseurl}/images/${category.categoryImage}`
-                : null,
-        }));
 
         return res.json({
             status: 200,
